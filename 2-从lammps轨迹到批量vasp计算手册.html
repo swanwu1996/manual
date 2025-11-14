@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Batch VASP Run Manual</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-size: 16px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background: #f5f5f7;
+      color: #222;
+      line-height: 1.6;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0.2rem 0;
+    }
+    header p {
+      margin: 0.2rem 0;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 0.4rem;
+      justify-content: center;
+    }
+    .meta span {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+    .card {
+      background: #fff;
+      border-radius: 0.9rem;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    h2 span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    h2 small {
+      font-weight: 500;
+      color: #555;
+    }
+    p {
+      margin: 0.2rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+    ul, ol {
+      padding-left: 1.2rem;
+      margin: 0.3rem 0 0.6rem;
+    }
+    li {
+      margin: 0.15rem 0;
+      font-size: 0.95rem;
+    }
+    code.inline {
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.4rem;
+      background: #e5e7eb;
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+    pre {
+      margin: 0.4rem 0 0.2rem;
+      padding: 0.75rem 0.8rem;
+      border-radius: 0.7rem;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    pre code {
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+    }
+    details {
+      margin-top: 0.3rem;
+      border-radius: 0.7rem;
+      background: #f1f5f9;
+      padding: 0.3rem 0.7rem 0.5rem;
+    }
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1f2937;
+      padding: 0.35rem 0;
+    }
+    details[open] summary {
+      border-bottom: 1px dashed #cbd5f5;
+      margin-bottom: 0.25rem;
+    }
+    details summary::before {
+      content: "▶";
+      display: inline-block;
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+      color: #4b5563;
+    }
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 768px) {
+      .page {
+        padding: 2rem 1.5rem 3rem;
+      }
+      .card {
+        padding: 1.4rem 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Batch VASP Run Manual</h1>
+      <p>从 LAMMPS 轨迹批量提取结构并使用 Slurm 数组批量运行 VASP</p>
+      <div class="meta">
+        <span>written by<code class="inline">qhwu</code></span>
+        <span>Env: Python + VASP + Slurm</span>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2><span class="step">0</span>准备 LAMMPS 轨迹</h2>
+      <p>假设已经得到等温系综轨迹文件：</p>
+      <pre><code>trajectory_nvt_bulk.lammpstrj</code></pre>
+      <p>其中包含 <code class="inline">ITEM: TIMESTEP</code>、<code class="inline">ITEM: NUMBER OF ATOMS</code>、<code class="inline">ITEM: BOX BOUNDS</code> 和 <code class="inline">ITEM: ATOMS ...</code> 等标准 LAMMPS 输出。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">1</span>准备 Python 工具脚本 <small>MD2dft_tools.py</small></h2>
+      <p>将以下内容保存为 <code class="inline">MD2dft_tools.py</code>：</p>
+      <details>
+        <summary>展开 / 折叠 MD2dft_tools.py 全部代码</summary>
+        <pre><code>import numpy as np
+import os, sys, argparse, math, re
+from typing import List, Tuple, Optional
+
+# ------------------------- POSCAR I/O -------------------------
+
+def read_poscar(path: str):
+    with open(path, 'r') as f:
+        lines = [ln.rstrip() for ln in f if ln.strip() != '']
+    if len(lines) < 8:
+        raise ValueError("POSCAR seems too short.")
+
+    title = lines[0].strip()
+    # scale line
+    scale = float(lines[1].split()[0])
+    # 3 lattice lines
+    lat = []
+    for i in range(3):
+        toks = lines[2+i].split()
+        if len(toks) < 3:
+            raise ValueError("Lattice line has <3 numbers.")
+        lat.append([float(toks[0]), float(toks[1]), float(toks[2])])
+    lat = np.array(lat, dtype=float) * scale  # apply VASP global scale
+
+    # Next line may be symbols or counts
+    idx = 5
+    tokens = lines[idx].split()
+    def is_all_ints(toks):
+        try:
+            [int(x) for x in toks]
+            return True
+        except:
+            return False
+
+    if is_all_ints(tokens):
+        # No symbol line
+        elems = None
+        counts = [int(x) for x in tokens]
+        idx += 1
+    else:
+        elems = tokens
+        idx += 1
+        counts = [int(x) for x in lines[idx].split()]
+        idx += 1
+
+    # Optional "Selective dynamics"
+    coord_header = lines[idx].strip()
+    if coord_header[0].lower() == 's':
+        idx += 1
+        coord_header = lines[idx].strip()
+
+    mode_char = coord_header[0].lower()
+    if mode_char in ['d']:
+        mode = 'd'
+    elif mode_char in ['c','k']:
+        mode = 'c'
+    else:
+        raise ValueError("Unknown coordinate selector (expect Direct or Cartesian).")
+
+    n_atoms = sum(counts)
+    coords = []
+    extra = []
+    for i in range(n_atoms):
+        toks = lines[idx+1+i].split()
+        if len(toks) < 3:
+            raise ValueError("Coordinate line <3 numbers.")
+        x,y,z = float(toks[0]), float(toks[1]), float(toks[2])
+        coords.append([x,y,z])
+        if len(toks) > 3:
+            extra.append(toks[3:])
+    coords = np.array(coords, dtype=float)
+
+    if elems is None:
+        # fabricate element names as E1,E2,...
+        elems = [f"E{i+1}" for i in range(len(counts))]
+
+    return title, elems, counts, lat, mode, coords
+
+def write_poscar(path: str, title: str, elems: List[str], counts: List[int], lat: np.ndarray,
+                 mode_out: str, coords_direct: np.ndarray):
+    with open(path, 'w') as f:
+        f.write(f"{title}
+")
+        f.write("  1.0
+")
+        for i in range(3):
+            f.write(f"  {lat[i,0]:16.10f}  {lat[i,1]:16.10f}  {lat[i,2]:16.10f}
+")
+        f.write("  " + "  ".join(elems) + "
+")
+        f.write("  " + "  ".join(str(c) for c in counts) + "
+")
+        if mode_out.lower().startswith('d'):
+            f.write("Direct
+")
+            # group by species
+            idx = 0
+            for c in counts:
+                blk = coords_direct[idx:idx+c]
+                for v in blk:
+                    f.write(f"  {v[0]:16.10f}  {v[1]:16.10f}  {v[2]:16.10f}
+")
+                idx += c
+        else:
+            f.write("Cartesian
+")
+            cart = coords_direct @ lat  # (N,3) x (3,3) -> (N,3)
+            idx = 0
+            for c in counts:
+                blk = cart[idx:idx+c]
+                for v in blk:
+                    f.write(f"  {v[0]:16.10f}  {v[1]:16.10f}  {v[2]:16.10f}
+")
+                idx += c
+
+def lat_volume(lat: np.ndarray) -> float:
+    return float(np.dot(lat[0], np.cross(lat[1], lat[2])))
+
+# ------------------------- V(T) tools -------------------------
+
+def vt_to_scale(vol_file: str, poscar0k: str, drop: float=0.25, norm: Optional[float]=None):
+    title, elems, counts, lat0, mode0, coords0 = read_poscar(poscar0k)
+    V0 = lat_volume(lat0)
+    vols = []
+    with open(vol_file, 'r') as f:
+        for ln in f:
+            s = ln.strip()
+            if not s: continue
+            try:
+                v = float(s.split()[0])
+                vols.append(v)
+            except:
+                continue
+    if len(vols) == 0:
+        raise ValueError("No numeric volumes found in vol file.")
+    if norm and norm != 0.0:
+        vols = [v/float(norm) for v in vols]
+    n = len(vols)
+    i0 = int(round(n*drop))
+    trimmed = vols[i0:]
+    V_mean = float(np.mean(trimmed))
+    V_std  = float(np.std(trimmed, ddof=1)) if len(trimmed) > 1 else 0.0
+    s = (V_mean / V0)**(1.0/3.0)
+    return V_mean, V_std, V0, s
+
+def cmd_vt(args):
+    V_mean, V_std, V0, s = vt_to_scale(args.vol, args.poscar, args.drop, args.norm)
+    print(f"[vt] Using {args.vol} with norm={args.norm if args.norm else 1}")
+    print(f"[vt] V0 = {V0:.6f} A^3; V_mean = {V_mean:.6f} A^3 (std={V_std:.6f}); s(T) = {s:.8f}")
+
+def cmd_vt2poscar(args):
+    V_mean, V_std, V0, s = vt_to_scale(args.vol, args.poscar, args.drop, args.norm)
+    print(f"[vt2poscar] Using {args.vol} with norm={args.norm if args.norm else 1}")
+    print(f"[vt2poscar] V0 = {V0:.6f} A^3; V_mean = {V_mean:.6f} A^3; s(T) = {s:.8f}")
+    title, elems, counts, lat0, mode0, coords0 = read_poscar(args.poscar)
+    latT = lat0 * s
+    # keep fractional order/species grouping
+    # ensure coords are in Direct
+    if mode0 == 'c':
+        # convert Cartesian -> Direct
+        inv = np.linalg.inv(lat0.T)
+        coords_direct = (coords0 @ inv)
+    else:
+        coords_direct = coords0.copy()
+    out_title = f"{' '.join(elems)} (scaled by s={s:.6f})"
+    write_poscar(args.out, out_title, elems, counts, latT, 'd', coords_direct)
+    print(f"[vt2poscar] Wrote {args.out}")
+
+def cmd_scale(args):
+    title, elems, counts, lat0, mode0, coords0 = read_poscar(args.poscar)
+    s = float(args.scale)
+    latT = lat0 * s
+    if mode0 == 'c':
+        inv = np.linalg.inv(lat0.T)
+        coords_direct = (coords0 @ inv)
+    else:
+        coords_direct = coords0.copy()
+    out_title = f"{title} (manual scale s={s:.6f})"
+    write_poscar(args.out, out_title, elems, counts, latT, 'd', coords_direct)
+    print(f"[scale] s={s:.8f} ; wrote {args.out}")
+
+# --------------------- LAMMPS trajectory -> frames ---------------------
+
+def write_poscar_simple(path, title, elements, counts, lat, coords_direct):
+    write_poscar(path, title, elements, counts, lat, 'd', np.array(coords_direct))
+
+def extract_frames_lammpstrj(traj_file: str, n_frames: int, start_frac: float, elements: List[str], outdir: str):
+    os.makedirs(outdir, exist_ok=True)
+
+    frames_offsets = []
+    with open(traj_file, 'r') as f:
+        while True:
+            pos = f.tell()
+            line = f.readline()
+            if not line:
+                break
+            if line.startswith("ITEM: TIMESTEP"):
+                frames_offsets.append(pos)
+                # Fast-forward until next TIMESTEP marker
+                while True:
+                    p2 = f.tell()
+                    l2 = f.readline()
+                    if not l2:
+                        break
+                    if l2.startswith("ITEM: TIMESTEP"):
+                        f.seek(p2)
+                        break
+
+    total_frames = len(frames_offsets)
+    if total_frames == 0:
+        raise ValueError("No frames found (missing 'ITEM: TIMESTEP').")
+
+    start_idx = min(int(total_frames * start_frac), max(total_frames-1, 0))
+    if n_frames <= 1:
+        idxs = [start_idx]
+    else:
+        idxs = [int(round(start_idx + k*(total_frames - start_idx - 1)/(n_frames - 1))) for k in range(n_frames)]
+    idxs = sorted(set([i for i in idxs if 0 <= i < total_frames]))
+
+    def read_frame_at_offset(f, offset):
+        f.seek(offset)
+        line = f.readline()  # ITEM: TIMESTEP
+        ts = f.readline().strip()  # timestep value
+
+        # NUMBER OF ATOMS
+        line = f.readline().strip()
+        while line and (not line.startswith("ITEM: NUMBER OF ATOMS")):
+            line = f.readline().strip()
+        natoms = int(f.readline().split()[0])
+
+        # BOX BOUNDS
+        bounds_hdr = f.readline().strip()
+        while bounds_hdr == "":
+            bounds_hdr = f.readline().strip()
+        if not bounds_hdr.startswith("ITEM: BOX BOUNDS"):
+            raise ValueError("Expected 'ITEM: BOX BOUNDS' after 'NUMBER OF ATOMS'.")
+        hdr_tokens = bounds_hdr.split()
+        triclinic = any(tok in ('xy','xz','yz') for tok in hdr_tokens)
+
+        line_x = f.readline().split()
+        line_y = f.readline().split()
+        line_z = f.readline().split()
+        if len(line_x) < 2 or len(line_y) < 2 or len(line_z) < 2:
+            raise ValueError("Malformed BOX BOUNDS lines.")
+        xlo, xhi = float(line_x[0]), float(line_x[1])
+        ylo, yhi = float(line_y[0]), float(line_y[1])
+        zlo, zhi = float(line_z[0]), float(line_z[1])
+        lx, ly, lz = (xhi-xlo), (yhi-ylo), (zhi-zlo)
+        xy = float(line_x[2]) if len(line_x) >= 3 else 0.0
+        xz = float(line_y[2]) if len(line_y) >= 3 else 0.0
+        yz = float(line_z[2]) if len(line_z) >= 3 else 0.0
+
+        a = np.array([lx, 0.0, 0.0], float)
+        b = np.array([xy, ly, 0.0], float)
+        c = np.array([xz, yz, lz], float)
+        lat = np.vstack([a,b,c])
+        origin = np.array([xlo, ylo, zlo], float)
+
+        # ATOMS header
+        atoms_hdr = f.readline().strip()
+        while atoms_hdr == "":
+          atoms_hdr = f.readline().strip()
+        if not atoms_hdr.startswith("ITEM: ATOMS"):
+            raise ValueError("Expected 'ITEM: ATOMS' line.")
+        cols = atoms_hdr.split()[2:]
+        def cidx(name):
+            try: return cols.index(name)
+            except ValueError: return None
+
+        xs_i = cidx('xs'); ys_i = cidx('ys'); zs_i = cidx('zs')
+        x_i  = cidx('x');  y_i  = cidx('y');  z_i  = cidx('z')
+        xu_i = cidx('xu'); yu_i = cidx('yu'); zu_i = cidx('zu')
+        type_i = cidx('type')
+
+        if type_i is None or ((xs_i is None and x_i is None and xu_i is None) or
+                              (ys_i is None and y_i is None and yu_i is None) or
+                              (zs_i is None and z_i is None and zu_i is None)):
+            raise ValueError("ATOMS must include 'type' and either (xs ys zs) or (x y z)/(xu yu zu).")
+
+        atoms = []
+        for _ in range(natoms):
+            ln = f.readline()
+            if not ln: break
+            toks = ln.split()
+            if not toks: continue
+            typ = int(float(toks[type_i])) if type_i is not None else 1
+            if xs_i is not None and ys_i is not None and zs_i is not None:
+                lam = np.array([float(toks[xs_i]), float(toks[ys_i]), float(toks[zs_i])], float)
+                atoms.append((typ, 'scaled', lam))
+            else:
+                xi = x_i if x_i is not None else xu_i
+                yi = y_i if y_i is not None else yu_i
+                zi = z_i if z_i is not None else zu_i
+                r = np.array([float(toks[xi]), float(toks[yi]), float(toks[zi])], float)
+                atoms.append((typ, 'cart', r))
+
+        # Map types to elements
+        type_to_elem = {i+1: e for i, e in enumerate(elements)}
+        elems_order = elements
+        counts = [0 for _ in elems_order]
+
+        invlatT = np.linalg.inv(lat.T)
+        coords_by_elem = {e: [] for e in elems_order}
+        for typ, mode, val in atoms:
+            el = type_to_elem.get(typ, f"T{typ}")
+            if mode == 'scaled':
+                sd = np.array(val, float)  # already fractional in triclinic lamda
+            else:
+                sd = invlatT @ (np.array(val) - origin)
+            # wrap to [0,1)
+            sd = sd - np.floor(sd)
+            if el in coords_by_elem:
+                coords_by_elem[el].append(sd.tolist())
+
+        coords_direct = []
+        final_counts = []
+        for e in elems_order:
+            lst = coords_by_elem[e]
+            final_counts.append(len(lst))
+            coords_direct.extend(lst)
+
+        title = f"Extracted frame ts={ts}"
+        return title, elems_order, final_counts, lat, coords_direct
+
+    out_paths = []
+    with open(traj_file, 'r') as f:
+        for k, idx in enumerate(idxs, 1):
+            title, elems_order, counts, lat, coords_direct = read_frame_at_offset(f, frames_offsets[idx])
+            fname = os.path.join(outdir, f"POSCAR_frame{k:03d}")
+            write_poscar_simple(fname, title, elems_order, counts, lat, coords_direct)
+            out_paths.append(fname)
+    return out_paths, idxs, total_frames
+
+def cmd_frames(args):
+    paths, idxs, total = extract_frames_lammpstrj(args.traj, args.n, args.start, args.elements, args.outdir)
+    print(f"[frames] total_frames={total}; selected idxs={idxs[:8]}{'...' if len(idxs)>8 else ''}")
+    for p in paths[:3]:
+        print(f"[frames] wrote {p}")
+    if len(paths) > 3:
+        print(f"[frames] ... and {len(paths)-3} more")
+
+# --------------------- log.lammps -> vol ---------------------
+
+def cmd_log2vol(args):
+    vols = []
+    with open(args.log, 'r', errors='ignore') as f:
+        col_idx = None
+        for ln in f:
+            s = ln.strip()
+            if not s:
+                continue
+            # Detect header lines that carry column names including Volume/vol
+            if re.search(r'Step', s) and (re.search(r'Volume', s, re.I) or re.search(r'vol', s, re.I)):
+                headers = s.split()
+                try:
+                    # Prefer "Volume" if present
+                    if 'Volume' in headers:
+                        col_idx = headers.index('Volume')
+                    elif 'volume' in headers:
+                        col_idx = headers.index('volume')
+                    else:
+                        # fallback to 'vol' (custom)
+                        col_idx = headers.index('vol')
+                except ValueError:
+                    col_idx = None
+                continue
+
+            if col_idx is not None:
+                toks = s.split()
+                # numeric line likely has many floats/ints
+                if len(toks) > col_idx:
+                    try:
+                        v = float(toks[col_idx])
+                        vols.append(v)
+                    except:
+                        # reset if a new non-numeric header arrives
+                        if re.search(r'[A-Za-z]', s):
+                            col_idx = None
+                        continue
+
+    if len(vols) == 0:
+        raise ValueError("No volumes parsed from log; check that thermo header includes Volume/vol.")
+
+    with open(args.out, 'w') as g:
+        for v in vols:
+            g.write(f"{v:.8f}
+")
+    print(f"[log2vol] wrote {args.out} with {len(vols)} rows.")
+
+
+# --------------------- downfold supercell -> primitive ---------------------
+
+def cmd_downfold(args):
+    title, elems, counts, lat, mode, coords = read_poscar(args.poscar)
+    if mode == 'c':
+        # convert to Direct
+        inv = np.linalg.inv(lat.T)
+        coords = coords @ inv
+
+    # reps & tile
+    if len(args.reps) != 3:
+        raise ValueError("--reps must have 3 integers, e.g., 3 3 3")
+    nx, ny, nz = [int(x) for x in args.reps]
+    if args.tile is None:
+        tile = [0,0,0]
+    else:
+        if len(args.tile) != 3:
+            raise ValueError("--tile must have 3 integers, e.g., 0 0 0")
+        tile = [int(x) for x in args.tile]
+    tol = float(args.tol)
+
+    # Expected counts per element if exactly divisible
+    nrep = nx*ny*nz
+    expected = []
+    for c in counts:
+        if c % nrep == 0:
+            expected.append(c // nrep)
+        else:
+            expected.append(None)  # unknown/irregular
+
+    # split coords by species
+    coords_by_elem = {}
+    idx = 0
+    for e, c in zip(elems, counts):
+        coords_by_elem[e] = coords[idx:idx+c].copy()
+        idx += c
+
+    # always wrap to [0,1)
+    def wrap01(x):
+        return x - np.floor(x)
+
+    # candidate tiles to try
+    cand_tiles = [tile]
+    if args.auto:
+        cand_tiles = []
+        for ix in range(nx):
+            for iy in range(ny):
+                for iz in range(nz):
+                    cand_tiles.append([ix,iy,iz])
+
+    best_data = None
+    for T in cand_tiles:
+        sel_by_elem = {e: [] for e in elems}
+        total_sel = 0
+        for e in elems:
+            s = wrap01(coords_by_elem[e])
+            u = s * np.array([nx, ny, nz], float)
+            # clamp near the upper boundary to avoid floor(2.999999999) ambiguity
+            u = np.minimum(u, np.array([nx,ny,nz], float) - 1e-10)
+            k = np.floor(u + tol).astype(int)
+            mask = (k[:,0] == T[0]) & (k[:,1] == T[1]) & (k[:,2] == T[2])
+            picked = u[mask] - np.array(T, float)  # coords inside tile (0..1)
+            sel_by_elem[e] = picked
+            total_sel += picked.shape[0]
+
+        # score selection: how close to expected per-element counts (if known)
+        score = 0.0
+        ok = True
+        for i,e in enumerate(elems):
+            selc = sel_by_elem[e].shape[0]
+            if expected[i] is not None:
+                score += abs(selc - expected[i])
+                if selc != expected[i]:
+                    ok = False
+
+        if best_data is None or score < best_data['score'] or (args.auto and ok and not best_data.get('ok', False)):
+            best_data = {
+                'tile': T,
+                'sel_by_elem': sel_by_elem,
+                'score': score,
+                'ok': ok,
+            }
+            # short circuit if exact match and not auto
+            if not args.auto and ok:
+                break
+
+    Tbest = best_data['tile']
+    sel_by_elem = best_data['sel_by_elem']
+
+    # construct output arrays & counts
+    out_counts = []
+    out_coords = []
+    for e in elems:
+        arr = np.array(sel_by_elem[e], float)
+        out_counts.append(arr.shape[0])
+        out_coords.append(arr)
+    out_coords = np.vstack(out_coords) if len(out_coords) else np.zeros((0,3))
+
+    # new lattice is supercell lattice divided by reps along a,b,c
+    lat_small = lat.copy()
+    lat_small[0,:] /= nx
+    lat_small[1,:] /= ny
+    lat_small[2,:] /= nz
+
+    out_title = f"{title} | downfold reps={nx}x{ny}x{nz} tile={Tbest[0]},{Tbest[1]},{Tbest[2]}"
+    write_poscar(args.out, out_title, elems, out_counts, lat_small, 'd', out_coords)
+
+    # summary
+    exp_str = ",".join(str(x) if x is not None else "-" for x in expected)
+    got_str = ",".join(str(x) for x in out_counts)
+    print(f"[downfold] tile={Tbest}  expected per species: [{exp_str}]  got: [{got_str}]")
+    if expected.count(None)==0 and any(e!=g for e,g in zip(expected, out_counts)):
+        print("[downfold] WARNING: counts mismatch. Consider --tile or --auto to pick another tile or adjust --tol.")
+
+# ------------------------------ CLI ------------------------------
+
+def main():
+    ap = argparse.ArgumentParser(description="V(T) & EPC helper tools")
+    sub = ap.add_subparsers(dest='cmd', required=True)
+
+    ap_vt = sub.add_parser('vt', help="Compute V_mean/std and s(T) from vol file + POSCAR")
+    ap_vt.add_argument('--vol', required=True)
+    ap_vt.add_argument('--poscar', required=True)
+    ap_vt.add_argument('--drop', type=float, default=0.25, help="drop first fraction as equilibration")
+    ap_vt.add_argument('--norm', type=float, default=None, help="divide all volumes by this factor (e.g., 27 for 3x3x3->prim)")
+    ap_vt.set_defaults(func=cmd_vt)
+
+    ap_vt2 = sub.add_parser('vt2poscar', help="Write POSCAR scaled to V(T)")
+    ap_vt2.add_argument('--vol', required=True)
+    ap_vt2.add_argument('--poscar', required=True)
+    ap_vt2.add_argument('--drop', type=float, default=0.25)
+    ap_vt2.add_argument('--norm', type=float, default=None)
+    ap_vt2.add_argument('--out', required=True)
+    ap_vt2.set_defaults(func=cmd_vt2poscar)
+
+    ap_sc = sub.add_parser('scale', help="Directly scale a POSCAR lattice by factor")
+    ap_sc.add_argument('--poscar', required=True)
+    ap_sc.add_argument('--scale', required=True, type=float)
+    ap_sc.add_argument('--out', required=True)
+    ap_sc.set_defaults(func=cmd_scale)
+
+    ap_fr = sub.add_parser('frames', help="Extract evenly spaced frames from .lammpstrj to POSCARs")
+    ap_fr.add_argument('--traj', required=True)
+    ap_fr.add_argument('--elements', nargs='+', required=True, help="element order matching LAMMPS 'type' (e.g., Cs I Pb)")
+    ap_fr.add_argument('--n', type=int, default=80)
+    ap_fr.add_argument('--start', type=float, default=0.5, help="fraction of frames to skip at beginning (e.g., 0.5)")
+    ap_fr.add_argument('--outdir', required=True)
+    ap_fr.set_defaults(func=cmd_frames)
+
+    ap_log = sub.add_parser('log2vol', help="Extract Volume column from log.lammps")
+    ap_log.add_argument('--log', required=True)
+    ap_log.add_argument('--out', required=True)
+    ap_log.set_defaults(func=cmd_log2vol)
+
+    ap_df = sub.add_parser('downfold', help='Downfold a supercell POSCAR into a primitive tile')
+    ap_df.add_argument('--poscar', required=True)
+    ap_df.add_argument('--reps', nargs=3, required=True, help='replicate counts, e.g., 3 3 3')
+    ap_df.add_argument('--tile', nargs=3, default=None, help='tile index to keep, e.g., 0 0 0')
+    ap_df.add_argument('--tol', default=1e-6, type=float, help='tolerance for tile selection')
+    ap_df.add_argument('--auto', action='store_true', help='try all tiles and pick best match to expected counts')
+    ap_df.add_argument('--out', required=True)
+    ap_df.set_defaults(func=cmd_downfold)
+
+    args = ap.parse_args()
+    args.func(args)
+
+if __name__ == '__main__':
+    main()</code></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>从 LAMMPS 轨迹提取均匀帧</h2>
+      <p>示例命令：</p>
+      <pre><code>python MD2dft_tools.py frames     --traj trajectory_nvt_bulk.lammpstrj     --elements Cs I Pb     --n 150     --start 0.1     --outdir dft_frames</code></pre>
+      <ul>
+        <li><code class="inline">--elements Cs I Pb</code>：元素顺序需与 LAMMPS <code class="inline">type</code> 顺序一致。</li>
+        <li><code class="inline">--n 150</code>：目标提取帧数。</li>
+        <li><code class="inline">--start 0.1</code>：丢弃前 10% 轨迹作为热化阶段。</li>
+        <li><code class="inline">--outdir dft_frames</code>：输出 POSCAR 的目录。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>规范重命名 POSCAR 帧</h2>
+      <p>将提取出的 POSCAR 重命名为统一格式 <code class="inline">frame_0001.POSCAR</code> 等：</p>
+      <pre><code>mkdir -p POSCARs
+i=1
+for f in dft_frames/POSCAR_frame*; do
+  printf -v id "%04d" "$i"
+  ln -sf "../$f" "POSCARs/frame_${id}.POSCAR"
+  i=$((i+1))
+done</code></pre>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">4</span>准备公共 VASP 输入</h2>
+      <p>在同一提交目录下准备：</p>
+      <ul>
+        <li><code class="inline">INCAR</code></li>
+        <li><code class="inline">KPOINTS</code></li>
+        <li><code class="inline">POTCAR</code></li>
+      </ul>
+      <p>这些文件会被每个帧的子目录通过软链接引用。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">5</span>使用 Slurm 数组批量跑 VASP</h2>
+      <p>示例 Slurm 脚本（<code class="inline">vasp-array</code> 作业）：</p>
+      <details>
+        <summary>展开 / 折叠 Slurm 数组脚本</summary>
+        <pre><code>#!/bin/bash
+#SBATCH --job-name=vasp-array
+#SBATCH --nodes=1
+#SBATCH --ntasks=32
+#SBATCH --cpus-per-task=1
+#SBATCH --time=240:00:00
+#SBATCH --array=1-150%3
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR}"
+
+module purge
+spack load vasp   # 请按自己的配置激活vasp环境
+
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+
+# 按需调整vasp执行程序vasp_ncl/vasp_std/vasp_gam
+run_vasp() {
+    mpirun -np "${SLURM_NTASKS}" vasp_ncl > "$1" 2>&1
+}
+
+ID=$(printf "%04d" "${SLURM_ARRAY_TASK_ID}")
+FRAME="frame_${ID}"
+
+SRC_DIR="${SLURM_SUBMIT_DIR}"
+WORKDIR="${SRC_DIR}/runs/${FRAME}"
+mkdir -p "${WORKDIR}"
+
+# Inputs
+ln -sf "${SRC_DIR}/KPOINTS"                 "${WORKDIR}/"
+ln -sf "${SRC_DIR}/POTCAR"                  "${WORKDIR}/"
+ln -sf "${SRC_DIR}/POSCARs/${FRAME}.POSCAR" "${WORKDIR}/POSCAR"
+
+cd "${WORKDIR}"
+
+# ---------- Step: PBE+SOC (single run) ----------
+# 若已完成（有完整计时块）则跳过
+if ! grep -q "General timing and accounting" OUTCAR 2>/dev/null; then
+  cp -f "${SRC_DIR}/INCAR" INCAR
+  run_vasp vasp.out
+
+  if ! grep -qi "reached required accuracy" OUTCAR 2>/dev/null; then
+    echo "[WARN] ${FRAME} may not have reached EDIFF; adjust EDIFF/NELM if needed."
+  fi
+fi
+
+echo "[DONE] ${FRAME} finished."</code></pre>
+      </details>
+      <ul>
+        <li><code class="inline">#SBATCH --array=1-150%3</code>：1–150 号帧，最多同时跑 3 个任务。</li>
+        <li>按需修改 <code class="inline">--ntasks</code>、<code class="inline">--time</code> 以及 <code class="inline">vasp_ncl</code> 可执行文件名。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">6</span>监控与后处理</h2>
+      <p>计算过程中，可在 <code class="inline">./runs/frame_*/</code> 目录中监控：</p>
+      <ul>
+        <li><code class="inline">OUTCAR</code>：能量收敛、应力、力等。</li>
+        <li><code class="inline">vasp.out</code>：运行日志、错误信息。</li>
+      </ul>
+      <p>全部完成后，可按需求对 <code class="inline">OUTCAR</code> / <code class="inline">CONTCAR</code> 等进行后处理、拟合或进一步统计分析。</p>
+    </section>
+
+    <div class="footer">
+      Batch VASP Run Manual · 可在此基础上自由扩展 / 修改样式
+    </div>
+  </div>
+</body>
+</html>

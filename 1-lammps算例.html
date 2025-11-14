@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>LAMMPS Example Manual</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-size: 16px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background: #f5f5f7;
+      color: #222;
+      line-height: 1.6;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0.2rem 0;
+    }
+    header p {
+      margin: 0.2rem 0;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 0.4rem;
+      justify-content: center;
+    }
+    .meta span {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+    .card {
+      background: #fff;
+      border-radius: 0.9rem;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    h2 span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    p {
+      margin: 0.2rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+    ul, ol {
+      padding-left: 1.2rem;
+      margin: 0.3rem 0 0.6rem;
+    }
+    li {
+      margin: 0.15rem 0;
+      font-size: 0.95rem;
+    }
+    code.inline {
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.4rem;
+      background: #e5e7eb;
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+    pre {
+      margin: 0.4rem 0 0.2rem;
+      padding: 0.75rem 0.8rem;
+      border-radius: 0.7rem;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    pre code {
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+    }
+    details {
+      margin-top: 0.3rem;
+      border-radius: 0.7rem;
+      background: #f1f5f9;
+      padding: 0.3rem 0.7rem 0.5rem;
+    }
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1f2937;
+      padding: 0.35rem 0;
+    }
+    details[open] summary {
+      border-bottom: 1px dashed #cbd5f5;
+      margin-bottom: 0.25rem;
+    }
+    details summary::before {
+      content: "▶";
+      display: inline-block;
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+      color: #4b5563;
+    }
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 768px) {
+      .page {
+        padding: 2rem 1.5rem 3rem;
+      }
+      .card {
+        padding: 1.4rem 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>LAMMPS Example Manual</h1>
+      <p>POSCAR 转 LAMMPS data，DeepMD 势下的一体化 NPT → NVT 工作流</p>
+      <div class="meta">
+        <span>Written by: <code class="inline">qhwu </code></span>
+        <span>Force field: DeepMD (Torch)</span>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2><span class="step">1</span>从 POSCAR 生成 LAMMPS 结构文件</h2>
+      <p>示例 Python 脚本 <code class="inline">poscar2lmp.py</code>：</p>
+      <details>
+        <summary>展开 / 折叠 poscar2lmp.py</summary>
+        <pre><code>from ase.io import read, write
+
+at = read('POSCAR')      # 读 POSCAR
+at.pbc = True            # 确保周期边界
+
+write(
+    'data.lmp',
+    at,
+    format='lammps-data',
+    atom_style='atomic',
+    specorder=['Cs', 'I', 'Pb']
+)
+
+# 运行:
+#   python poscar2lmp.py
+# 生成的 data.lmp 即为 LAMMPS 标准输入结构文件</code></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>控制文件 in.lmp：NPT → NVT 工作流</h2>
+      <p>以下为完整 LAMMPS 输入文件示例（使用 DeepMD 势，变量可按需调整）：</p>
+      <details>
+        <summary>展开 / 折叠 in.lmp 全部内容</summary>
+        <pre><code># ================================================================
+# One-file NPT -> NVT workflow (bulk α-CsPbI3, 2x2x2, DeepMD Torch)
+# Step 1: NVT预热到 600 K
+# Step 2: NPT@600K, 0 bar 生产并做“窗口平均”得到 L* (等于 lx 的平滑平均)
+# Step 3: 固定盒长为 L*，切换 NVT@600K 继续采样（给 VASP/TDEP 用）
+# ================================================================
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+newton          on
+
+# ---------------- User knobs ----------------
+variable  T             equal 550.0           # 温度 (K)
+variable  P             equal 0.0             # 压力 (bar) 注意 units metal
+variable  Seed          equal 24680
+variable  dt            equal 0.001           # ps -> 1 fs
+variable  nvt_tdamp     equal 0.5             # ps，NVT 温度耦合时间
+variable  npt_tdamp     equal 1.0             # ps，NPT 温度耦合时间
+variable  npt_pdamp     equal 10.0            # ps，NPT 压力耦合时间
+
+# 统计窗口设置（NPT 生产段）
+variable  sample        equal 1000            # 每 1000 步采一次样（≈ 1 ps）
+variable  window        equal 100             # 窗口大小 100 个样（≈ 100 ps）
+
+# 轨迹输出频率
+variable  dump_npt      equal 1000            # NPT 每 1 ps 一帧
+variable  dump_nvt      equal 500             # NVT 每 0.5 ps 一帧
+
+log                log.npt_nvt.bulk
+
+# ---------------- Read data ----------------
+print           "--- Reading bulk 2x2x2 system ---"
+# 类型顺序需与模型一致：1:Cs  2:I  3:Pb
+read_data        data.lmp
+
+# ---------------- DeepMD (Torch backend) ----------------
+print           "--- Force field (DeepMD-Torch) ---"
+mass            1 132.905    # Cs
+mass            2 126.904    # I
+mass            3 207.2      # Pb
+
+pair_style      deepmd perovskite_model.pth
+pair_coeff      * *  Cs  I  Pb
+
+# ---------------- Neighbor list ----------------
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# ---------------- Thermo ----------------
+timestep        ${dt}
+thermo          1000
+thermo_style    custom step time temp press pxx pyy pzz lx ly lz vol pe ke etotal
+
+# ===== 0) NVT 预热到 600 K =====
+velocity        all create ${T} ${Seed} dist gaussian mom yes rot yes
+fix             HEAT all nvt temp ${T} ${T} ${nvt_tdamp}
+run             20000                       # 20 ps
+unfix           HEAT
+
+# ===== 1) NPT 等压等温，生产并做窗口平均得到 L* =====
+fix             NPT all npt temp ${T} ${T} ${npt_tdamp} iso ${P} ${P} ${npt_pdamp} drag 1.0
+
+# 可选短热化
+run             30000                       # 30 ps
+
+# --- 关键：把盒长/体积先做成 equal-style 变量，再喂给 ave/time ---
+variable        Lx  equal lx                 # 立方 + iso 情况，直接用 lx
+# 如果以后改成各向异性 barostat，可改用体积：
+# variable      Vol equal vol
+
+# 窗口平均：每 1000 步取样一次，窗口 100 个样本（约 100 ps）
+fix             AVE_L all ave/time ${sample} 1 ${sample} v_Lx ave window ${window}
+# 如用各向异性 barostat，请改为：
+# fix          AVE_V all ave/time ${sample} 1 ${sample} v_Vol ave window ${window}
+
+# NPT 生产段
+dump            Dnpt all custom ${dump_npt} trajectory_npt.lammpstrj id type x y z
+dump_modify     Dnpt sort id element Cs I Pb
+run             200000                       # 200 ps
+undump          Dnpt
+unfix           NPT
+
+# 读取窗口平均并打印（注意：此时 AVE_* 仍然存在，才能访问 f_AVE_*）
+variable        LFIX equal f_AVE_L
+# 如用体积：variable LFIX equal pow(f_AVE_V, (1.0/3.0))
+
+print           "---- Window-avg L*: ${LFIX} Angstrom (from lx, window=${window} samples)"
+# 固定盒长为 L*，并 remap 原子坐标
+change_box      all x final 0 ${LFIX} y final 0 ${LFIX} z final 0 ${LFIX} remap
+
+# 清理统计 fix
+unfix           AVE_L
+# unfix        AVE_V
+
+# ===== 2) 固定盒的 NVT 生产段 =====
+fix             NVT all nvt temp ${T} ${T} ${nvt_tdamp}
+dump            Dnvt all custom ${dump_nvt} trajectory_nvt_bulk.lammpstrj id type x y z
+dump_modify     Dnvt sort id element Cs I Pb
+restart         100000 restart.nvt.bulk.*.bin
+
+run             200000                      # 200 ps
+
+undump          Dnvt
+unfix           NVT
+
+write_restart   restart.nvt.bulk.final.bin
+write_data      data.nvt.bulk.final
+
+print           "NPT->NVT combined workflow finished successfully."</code></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>准备 DeepMD 势 &amp; 运行 LAMMPS</h2>
+      <ol>
+        <li>将训练好的 DeepMD 势文件 <code class="inline">perovskite_model.pth</code> 放在与 <code class="inline">in.lmp</code> 同一目录。</li>
+        <li>确保 <code class="inline">data.lmp</code>、<code class="inline">in.lmp</code>、<code class="inline">perovskite_model.pth</code> 就绪后运行：</li>
+      </ol>
+      <pre><code>lmp -in in.lmp &gt; log.lmp</code></pre>
+      <p>完成后主要产物包括：</p>
+      <ul>
+        <li><code class="inline">log.lmp</code>：完整运行记录（温度、压力、体积等）。</li>
+        <li><code class="inline">trajectory_nvt_bulk.lammpstrj</code>：固定盒长下的 NVT 轨迹，用于后续 VASP/TDEP 采样。</li>
+        <li><code class="inline">data.nvt.bulk.final</code>：末态结构，可供其他计算继续使用。</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      LAMMPS Example Manual · 可在此基础上自由扩展 / 修改样式
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>TDEP 使用手册（完整流程）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-size: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background: #f5f5f7;
+      color: #222;
+      line-height: 1.6;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0.2rem 0;
+    }
+
+    header p {
+      margin: 0.2rem 0;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 0.9rem;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    h2 span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    h2 small {
+      font-weight: 500;
+      color: #555;
+    }
+
+    h3 {
+      font-size: 1rem;
+      margin: 0.4rem 0 0.4rem;
+      color: #111827;
+    }
+
+    p {
+      margin: 0.2rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    ul, ol {
+      padding-left: 1.2rem;
+      margin: 0.3rem 0 0.6rem;
+    }
+
+    li {
+      margin: 0.15rem 0;
+      font-size: 0.95rem;
+    }
+
+    code.inline {
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.4rem;
+      background: #e5e7eb;
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+
+    pre {
+      margin: 0.4rem 0 0.2rem;
+      padding: 0.75rem 0.8rem;
+      border-radius: 0.7rem;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    pre code {
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+    }
+
+    details {
+      margin-top: 0.3rem;
+      border-radius: 0.7rem;
+      background: #f1f5f9;
+      padding: 0.3rem 0.7rem 0.5rem;
+    }
+
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1f2937;
+      padding: 0.35rem 0;
+    }
+
+    details[open] summary {
+      border-bottom: 1px dashed #cbd5f5;
+      margin-bottom: 0.25rem;
+    }
+
+    details summary::before {
+      content: "▶";
+      display: inline-block;
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+      color: #4b5563;
+    }
+
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.08rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid rgba(37, 99, 235, 0.2);
+      margin-left: 0.3rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 0.4rem;
+    }
+
+    .meta span {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 1.5rem;
+    }
+
+    @media (min-width: 768px) {
+      .page {
+        padding: 2rem 1.5rem 3rem;
+      }
+
+      .card {
+        padding: 1.4rem 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>TDEP 使用手册</h1>
+      <p>一次性生成 TDEP 所需 6 个文件，并完成后处理（满血版流程）</p>
+      <div class="meta">
+        <span>written by<code class="inline">qhwu </code></span>
+        <span>环境：VASP + TDEP</span>
+        <span>示例温度：600 K</span>
+      </div>
+    </header>
+
+    <!-- 目录与输入假设 -->
+    <section class="card">
+      <h2>
+        <span class="step">0</span>
+        目录与输入假设
+      </h2>
+      <p>默认目录结构如下，每个 <code class="inline">frame_xxxx</code> 存放一帧的 POSCAR 与 OUTCAR：</p>
+      <pre><code>runs/
+  frame_0001/ POSCAR  OUTCAR
+  frame_0002/ POSCAR  OUTCAR
+  ...
+  frame_0080/ POSCAR  OUTCAR
+</code></pre>
+      <ul>
+        <li>每个 <code class="inline">POSCAR</code> 为对应帧结构，建议使用 <code class="inline">Direct</code> 分数坐标。</li>
+        <li>每个 <code class="inline">OUTCAR</code> 为对应帧的 VASP 单点，包含 <code class="inline">TOTAL-FORCE</code> 块。</li>
+        <li>物种顺序（示例：<code class="inline">Cs I Pb</code>）在所有帧保持一致，原子总数 <code class="inline">N</code> 不变。</li>
+      </ul>
+    </section>
+
+    <!-- Step 1: 生成时间平均参考超胞 -->
+    <section class="card">
+      <h2>
+        <span class="step">1</span>
+        生成时间平均参考超胞 <small>POSCAR_avg_600K</small>
+      </h2>
+      <p>在 <code class="inline">runs/</code> 下运行以下 Python 脚本，从 LAMMPS 轨迹计算时间平均结构：</p>
+      <details>
+        <summary>展开 / 折叠 Python 代码</summary>
+        <pre><code>from ase.io import read, write
+from ase.io.lammpsrun import read_lammps_dump
+from ase import Atoms
+import numpy as np
+
+traj_file = 'traj_VI0_nvt.lammpstrj'
+
+images = read(traj_file, index=':', format='lammps-dump-text')
+
+print(f"Read {len(images)} frames from {traj_file}")
+
+n_frames = len(images)
+ref = images[0]
+cell = ref.cell.copy()
+
+# 把 H/He/Li 映射成 Cs/I/Pb
+orig_symbols = ref.get_chemical_symbols()
+mapping = {'H': 'Cs', 'He': 'I', 'Li': 'Pb'}
+symbols = [mapping[s] for s in orig_symbols]
+
+# 收集分数坐标
+frac_all = []
+for img in images:
+    frac_all.append(img.get_scaled_positions())
+frac_all = np.array(frac_all)
+
+frac_unwrapped = frac_all.copy()
+n_atoms = frac_unwrapped.shape[1]
+
+for ia in range(n_atoms):
+    for ic in range(3):
+        x = frac_unwrapped[:, ia, ic]
+        dx = np.diff(x)
+        dx[dx &gt;  0.5] -= 1.0
+        dx[dx &lt; -0.5] += 1.0
+        x_unwrap = np.concatenate([[x[0]], x[0] + np.cumsum(dx)])
+        frac_unwrapped[:, ia, ic] = x_unwrap
+
+# 时间平均 + 折回 [0,1)
+frac_mean = frac_unwrapped.mean(axis=0) % 1.0
+
+avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
+avg_atoms.set_scaled_positions(frac_mean)
+
+out_file = 'POSCAR_avg_600K'
+write(out_file, avg_atoms, format='vasp', direct=True, vasp5=True)
+
+print(f"Average structure written to {out_file}")</code></pre>
+      </details>
+      <p>生成的平均结构将写入 <code class="inline">POSCAR_avg_600K</code>。</p>
+    </section>
+
+    <!-- Step 2: 生成参考超胞文件 -->
+    <section class="card">
+      <h2>
+        <span class="step">2</span>
+        生成参考超胞文件 <small>infile.ssposcar / infile.ucposcar</small>
+      </h2>
+      <p>在同一目录下执行：</p>
+      <pre><code>cp POSCAR_avg_600K infile.ssposcar
+cp POSCAR_avg_600K infile.ucposcar</code></pre>
+    </section>
+
+    <!-- Step 3: 统计 N 与 Nt -->
+    <section class="card">
+      <h2>
+        <span class="step">3</span>
+        原子总数 N 与帧数 Nt
+      </h2>
+      <p>统计原子总数 <code class="inline">N</code> 与帧数 <code class="inline">Nt</code>：</p>
+      <pre><code>N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s}' infile.ssposcar)
+frames=(frame_????)    # 自动匹配 frame_0001…frame_*
+Nt=${#frames[@]}
+echo "N=$N, Nt=$Nt"</code></pre>
+    </section>
+
+    <!-- Step 4: 拼接 positions -->
+    <section class="card">
+      <h2>
+        <span class="step">4</span>
+        拼接 positions <small class="badge">infile.positions</small>
+      </h2>
+      <p>按每帧 <code class="inline">N</code> 行，从各帧 <code class="inline">POSCAR</code> 的坐标段提取分数坐标：</p>
+      <details>
+        <summary>展开 / 折叠 shell 脚本（positions）</summary>
+        <pre><code>rm -f infile.positions
+# 读总原子数（以 infile.ssposcar 为准）
+N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar)
+
+: &gt; infile.positions  # 清空输出文件
+
+# 遍历帧
+for d in $(ls -1d frame_???? | sort -V); do
+  pos="$d/POSCAR"
+
+  # 找出 "Direct" 或 "Cartesian" 所在的行号（不区分大小写）
+  cline=$(awk 'tolower($1)=="direct" || tolower($1)=="cartesian"{print NR; exit}' "$pos")
+  if [ -z "$cline" ]; then
+    echo "[$d] POSCAR 里找不到 Direct/Cartesian 行"; exit 1
+  fi
+
+  # 读取该行的标签与起始坐标行号
+  mode=$(awk -v n="$cline" 'NR==n{print tolower($1)}' "$pos")
+  start=$((cline+1))
+
+  if [ "$mode" = "direct" ]; then
+    # 直接把分数坐标抄出来
+    awk -v s="$start" -v n="$N" 'NR&gt;=s &amp;&amp; NR&lt;s+n {print $1,$2,$3}' "$pos" &gt;&gt; infile.positions
+  else
+    echo "[$d] 是 Cartesian 坐标：请先转换为 Direct（你原脚本里写的是 '''exit1 1''', 应改为 '''exit 1'''）"
+    exit 1
+  fi
+done</code></pre>
+      </details>
+    </section>
+
+    <!-- Step 5: forces -->
+    <section class="card">
+      <h2>
+        <span class="step">5</span>
+        拼接 forces <small class="badge">infile.forces</small>
+      </h2>
+      <p>从每帧 <code class="inline">OUTCAR</code> 中提取最后一个 <code class="inline">TOTAL-FORCE</code> 块：</p>
+      <details>
+        <summary>展开 / 折叠 shell 脚本（forces）</summary>
+        <pre><code>rm -f infile.forces
+for d in $(ls -1d frame_???? | sort -V); do
+  s=$(grep -n "POSITION[[:space:]].*TOTAL-FORCE" $d/OUTCAR | tail -1 | cut -d: -f1)
+  awk -v start="$s" -v N="$N" 'NR&gt;=start+2 &amp;&amp; NR&lt;start+2+N {printf("%s %s %s
+", $(NF-2),$(NF-1),$NF)}'       $d/OUTCAR &gt;&gt; infile.forces
+done</code></pre>
+      </details>
+    </section>
+
+    <!-- Step 6: lattice -->
+    <section class="card">
+      <h2>
+        <span class="step">6</span>
+        拼接 lattice <small class="badge">infile.lattice</small>
+      </h2>
+      <p>从各帧 <code class="inline">POSCAR</code> 第 3–5 行提取晶格向量：</p>
+      <pre><code>rm -f infile.lattice
+for d in $(ls -1d frame_???? | sort -V); do
+  sed -n '3,5p' "$d/POSCAR" &gt;&gt; infile.lattice
+done</code></pre>
+    </section>
+
+    <!-- Step 7: meta -->
+    <section class="card">
+      <h2>
+        <span class="step">7</span>
+        写 meta 文件 <small class="badge">infile.meta</small>
+      </h2>
+      <p><code class="inline">meta</code> 包含原子数、帧数、时间步长（fs）、名义温度（K）：</p>
+      <pre><code># 若 80 帧来自 ~1 ns，则每帧间隔 ~12.5 ps = 12500 fs
+printf "%d
+%d
+%.1f
+%.1f
+" "$N" "$Nt" 12500.0 600.0 &gt; infile.meta</code></pre>
+    </section>
+
+    <!-- Step 8: 快速一致性自检 -->
+    <section class="card">
+      <h2>
+        <span class="step">8</span>
+        快速一致性自检
+      </h2>
+      <p>检查行数、列数及换行：</p>
+      <details>
+        <summary>展开 / 折叠自检脚本</summary>
+        <pre><code>echo "positions 行数=$(wc -l &lt; infile.positions) (应为 N*Nt=$((N*Nt)))"
+echo "forces    行数=$(wc -l &lt; infile.forces)    (应为 N*Nt=$((N*Nt)))"
+echo "lattice   行数=$(wc -l &lt; infile.lattice)   (应为 3*Nt=$((3*Nt)))"
+
+awk '{if (NF!=3)  {print "positions 列数异常: 第",NR,"行"; exit 1}}' infile.positions || exit 1
+awk '{if (NF!=3)  {print "forces 列数异常: 第",NR,"行"; exit 1}}'    infile.forces    || exit 1
+awk '{if (NF!=3)  {print "lattice 列数异常: 第",NR,"行"; exit 1}}'   infile.lattice   || exit 1
+
+# meta 必须 4 行
+[ "$(wc -l &lt; infile.meta)" -eq 4 ] || { echo "infile.meta 不是 4 行"; exit 1; }
+
+# 文件末尾确保有换行（Fortran）
+for f in infile.positions infile.forces infile.lattice infile.meta; do
+  tail -c1 "$f" | od -An -t x1 | grep -q '0a' || printf "
+" &gt;&gt; "$f"
+done
+
+echo "[OK] 基本一致性通过"</code></pre>
+      </details>
+    </section>
+
+    <!-- Step 9: 生成 stat -->
+    <section class="card">
+      <h2>
+        <span class="step">9</span>
+        生成 infile.stat
+      </h2>
+      <p>将下面脚本保存为 <code class="inline">make_stat.sh</code>，在当前目录执行 <code class="inline">bash make_stat.sh</code>：</p>
+      <details>
+        <summary>展开 / 折叠 make_stat.sh</summary>
+        <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+# ===== 用户可改参数 =====
+DT_FS=12500    # 帧间隔（fs）
+TEMP_K=600     # 名义温度（K）
+# =======================
+
+# 基本检查
+for f in infile.positions infile.forces infile.lattice infile.meta infile.ssposcar infile.ucposcar; do
+  [[ -s "$f" ]] || { echo "缺文件: $f"; exit 1; }
+done
+
+# 统计帧数（以 positions 为准）
+N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar)
+Nt_pos=$(( $(wc -l &lt; infile.positions) / N ))
+echo "检测到 N=$N, Nt(positions)=$Nt_pos"
+
+# 罗列帧目录
+mapfile -t FRAMES &lt; &lt;(ls -1d frame_???? | sort -V)
+Nt_dirs=${#FRAMES[@]}
+if [[ $Nt_dirs -ne $Nt_pos ]]; then
+  echo "警告：目录帧数($Nt_dirs) 与 positions 推断($Nt_pos) 不一致，仍以目录顺序生成 infile.stat"
+fi
+
+echo "生成 infile.stat ..."
+: &gt; infile.stat
+
+i=0
+for d in "${FRAMES[@]}"; do
+  i=$(( i + 1 ))
+  t_fs=$(( (i-1)*DT_FS ))
+
+  # 读取源：优先 .gz
+  if   [[ -s "$d/OUTCAR.gz" ]]; then src=(gzip -cd -- "$d/OUTCAR.gz")
+  elif [[ -s "$d/OUTCAR"    ]]; then src=(cat        -- "$d/OUTCAR")
+  else echo "缺 OUTCAR: $d"; exit 1; fi
+
+  # Ep/Et：优先 "energy  without entropy="，否则退回 TOTEN
+  Ep=$("${src[@]}" | awk '
+    /energy  without entropy=/ { e=$4 }
+    /free  energy   TOTEN/     { t=$5 }
+    END { if (e!="") print e; else if (t!="") print t; else print 0 }
+  ')
+  Et="$Ep"
+  Ek="0.0"
+  T="$TEMP_K"
+
+  # 取最后一个 in kB 行上的 6 个分量
+  stress_vals=$("${src[@]}" | awk '/in kB/ {print $(NF-5),$(NF-4),$(NF-3),$(NF-2),$(NF-1),$NF}' | tail -n 1)
+  if [[ -z "$stress_vals" ]]; then
+    echo "[$d] 未找到应力（in kB）"; exit 1
+  fi
+  read -r sxx_kB syy_kB szz_kB sxy_kB syz_kB sxz_kB &lt;&lt;&lt; "$stress_vals"
+
+  # kB -&gt; GPa（×0.1）
+  sxx=$(awk -v x="$sxx_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+  syy=$(awk -v x="$syy_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+  szz=$(awk -v x="$szz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+  sxy=$(awk -v x="$sxy_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+  syz=$(awk -v x="$syz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+  sxz=$(awk -v x="$sxz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+
+  # 压力（GPa）：P = - (sxx+syy+szz)/3
+  P=$(awk -v a="$sxx" -v b="$syy" -v c="$szz" 'BEGIN{printf("%.6f", -(a+b+c)/3.0)}')
+
+  # 输出（13列）：i t Et Ep Ek T P sxx syy szz sxy syz sxz
+  printf "%d %.1f %.10f %.10f %.6f %.1f %.6f %.6f %.6f %.6f %.6f %.6f %.6f
+"          "$i" "$t_fs" "$Et" "$Ep" "$Ek" "$T" "$P" "$sxx" "$syy" "$szz" "$sxy" "$syz" "$sxz"          &gt;&gt; infile.stat
+done
+
+# 自检：列数、行尾换行
+awk '{if (NF!=13){print "infile.stat 第",NR,"行列数=",NF,"≠13"; exit 1}} END{print "infile.stat 列数OK(13)"}' infile.stat
+tail -c1 infile.stat | od -An -t x1 | grep -q '0a' || printf "
+" &gt;&gt; infile.stat
+echo "完成：infile.stat（共 $(wc -l &lt; infile.stat) 行，对应 $i 帧）"</code></pre>
+      </details>
+    </section>
+
+    <!-- Step 10: 打包为 outfile.sim.hdf5 -->
+    <section class="card">
+      <h2>
+        <span class="step">10</span>
+        打包为 outfile.sim.hdf5
+      </h2>
+      <p>关键一步，生成 TDEP 使用的模拟数据文件：</p>
+      <pre><code>pack_simulation -npt --temperature 600</code></pre>
+    </section>
+
+    <!-- Step 11: 后处理流程 -->
+    <section class="card">
+      <h2>
+        <span class="step">11</span>
+        后处理：FC2 拟合与声子 DOS
+      </h2>
+      <ol>
+        <li>拟合 600 K 有效二阶力常数（FC2）：</li>
+      </ol>
+      <pre><code>extract_forceconstants -rc2 7.0</code></pre>
+      <ol start="2">
+        <li>计算声子 DOS 与 600 K 热力学量：</li>
+      </ol>
+      <pre><code>ln -sf outfile.forceconstant infile.forceconstant
+phonon_dispersion_relations --dos --qpoint_grid 18 18 18 --unit mev | tee log.ph</code></pre>
+    </section>
+
+    <!-- Step 12: 计算 F_vib -->
+    <section class="card">
+      <h2>
+        <span class="step">12</span>
+        计算 F<sub>vib</sub>(T)（以 600 K 为例）
+      </h2>
+      <p>将下列脚本保存为 <code class="inline">calc_Fvib_600K.sh</code>，默认读取 <code class="inline">outfile.phonon_dos</code> 与 <code class="inline">infile.ssposcar</code>：</p>
+      <details>
+        <summary>展开 / 折叠 calc_Fvib_600K.sh</summary>
+        <pre><code>#!/bin/bash
+# 计算 TDEP 输出 outfile.phonon_dos 的 F_vib(T) （默认 T=600 K）
+# 用 infile.ssposcar 第 7 行的原子数求 N，再用 DOS 做数值积分
+# 用法：
+#   bash calc_Fvib_600K.sh            # 默认读 outfile.phonon_dos, T=600K
+#   bash calc_Fvib_600K.sh dosfile T  # 自定义 DOS 文件和温度
+
+dosfile=${1:-outfile.phonon_dos}
+T=${2:-600}
+ssposcar=infile.ssposcar
+
+if [ ! -f "$dosfile" ]; then
+  echo "ERROR: 找不到 DOS 文件: $dosfile"
+  exit 1
+fi
+
+if [ ! -f "$ssposcar" ]; then
+  echo "ERROR: 找不到结构文件: $ssposcar (用来读原子数 N)"
+  exit 1
+fi
+
+# 从 infile.ssposcar 第 7 行把所有元素个数加起来 -> N
+N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s}' "$ssposcar")
+
+echo "使用 DOS 文件: $dosfile"
+echo "使用结构文件: $ssposcar"
+echo "原子总数 N = $N"
+echo "温度 T = $T K"
+
+awk -v N="$N" -v T="$T" '
+BEGIN{
+  # k_B in meV/K (1 eV = 1000 meV)
+  kB = 8.617333262e-2
+  kT = kB*T
+  eps = 1e-20
+
+  print "-----------------------------------------------"
+  print "Integrating F_vib from " ARGV[1]
+  print "T = " T " K, kT = " kT " meV"
+  print "-----------------------------------------------"
+}
+
+# 跳过注释行，只要有两列以上的数：E(meV)  DOS(E)
+$1 !~ /^#/ && NF >= 2 {
+  E = $1
+  D = $2
+
+  # 第一行只做初始化
+  if (++i == 1) {
+    pE = E
+    pD = D
+    next
+  }
+
+  dE = E - pE
+
+  # 只在区间两端都 >0 的时候积分（丢掉虚频区间）
+  if (E > 0 && pE > 0) {
+    # 对纯 DOS 积分：梯形法
+    Davg = 0.5*(D + pD)
+    area += Davg * dE
+
+    # 对 D(E)*f(E) 积分：也用梯形法，但要对 D*f 做
+    f1 = 0.5*pE + kT*log(1 - exp(-pE/kT) + eps)  # F(pE)
+    f2 = 0.5*E  + kT*log(1 - exp(-E /kT) + eps)  # F(E)
+
+    # 梯形：∫ D(E)F(E)dE ≈ 0.5 * (D1*F1 + D2*F2) * dE
+    Fsum += 0.5*(pD*f1 + D*f2) * dE
+  }
+
+  # 标记是否有负频（虚频）
+  if (E < 0 || pE < 0) neg = 1
+
+  pE = E
+  pD = D
+}
+
+END{
+  if (area <= 0) {
+    print "ERROR: 没有正能量区间可积（area <= 0），检查 DOS 或虚频情况。"
+    exit 1
+  }
+
+  modes = 3.0 * N          # 一共 3N 个声子模
+  scale = modes / area     # 把 DOS 归一化到 3N
+
+  F_cell_meV = scale * Fsum        # meV/小胞
+  F_cell_eV  = F_cell_meV / 1000.0
+  F_atom_eV  = F_cell_eV / N
+
+  print ""
+  printf("positive-area(raw) = %.6f (meV)
+", area)
+  printf("scale factor       = %.6f (target modes = %.1f)
+", scale, modes)
+  print "-----------------------------------------------"
+  printf("F_vib(T=%.1f K) = %.6f eV/atom
+", T, F_atom_eV)
+  printf("F_vib(T=%.1f K) = %.6f eV/cell  (N = %d)
+",
+         T, F_cell_eV, N)
+  print "-----------------------------------------------"
+
+  if (neg) {
+    print "Note: 检测到虚频(负能量)，只对 E>0 区间做积分并重归一化到 3N 模。"
+    print "      结果为近似值，建议以后在改进力常数/去虚频后再对比一次。"
+  }
+}
+' "$dosfile"</code></pre>
+      </details>
+    </section>
+
+    <div class="footer">
+      TDEP 打包与后处理流程页面 · 可自行扩展 / 修改样式
+    </div>
+  </div>
+</body>
+</html>

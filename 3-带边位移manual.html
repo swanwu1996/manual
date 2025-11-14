@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>带边位移计算手册（EPC）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-size: 16px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background: #f5f5f7;
+      color: #222;
+      line-height: 1.6;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0.2rem 0;
+    }
+    header p {
+      margin: 0.2rem 0;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 0.4rem;
+      justify-content: center;
+    }
+    .meta span {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+    .card {
+      background: #fff;
+      border-radius: 0.9rem;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    h2 span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    h2 small {
+      font-weight: 500;
+      color: #555;
+    }
+    p {
+      margin: 0.2rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+    ul, ol {
+      padding-left: 1.2rem;
+      margin: 0.3rem 0 0.6rem;
+    }
+    li {
+      margin: 0.15rem 0;
+      font-size: 0.95rem;
+    }
+    code.inline {
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.4rem;
+      background: #e5e7eb;
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+    pre {
+      margin: 0.4rem 0 0.2rem;
+      padding: 0.75rem 0.8rem;
+      border-radius: 0.7rem;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    pre code {
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+    }
+    details {
+      margin-top: 0.3rem;
+      border-radius: 0.7rem;
+      background: #f1f5f9;
+      padding: 0.3rem 0.7rem 0.5rem;
+    }
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #1f2937;
+      padding: 0.35rem 0;
+    }
+    details[open] summary {
+      border-bottom: 1px dashed #cbd5f5;
+      margin-bottom: 0.25rem;
+    }
+    details summary::before {
+      content: "▶";
+      display: inline-block;
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+      color: #4b5563;
+    }
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 768px) {
+      .page {
+        padding: 2rem 1.5rem 3rem;
+      }
+      .card {
+        padding: 1.4rem 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>带边位移计算手册（EPC）</h1>
+      <p>从 NVT 轨迹到带边位移 ΔEv / ΔEc / ΔEg 的后处理流程</p>
+      <div class="meta">
+        <span>Written by<code class="inline">qhwu </code></span>
+        <span>Input: <code class="inline">POSCAR_0K</code> + <code class="inline">trajectory_nvt_bulk.lammpstrj</code></span>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2><span class="step">1</span>准备 0 K 结构与 NVT 轨迹</h2>
+      <ul>
+        <li><code class="inline">POSCAR_0K</code>：0 K 参考结构（VASP relaxed 结果）。</li>
+        <li><code class="inline">trajectory_nvt_bulk.lammpstrj</code>：固定盒长 NVT 轨迹（来自 LAMMPS 算例）。</li>
+      </ul>
+      <p>后续所有 VASP 帧计算都建议使用统一的 <code class="inline">INCAR</code> / <code class="inline">KPOINTS</code> / <code class="inline">POTCAR</code> 设置。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>从轨迹生成 600 K 时间平均参考超胞</h2>
+      <p>在包含 NVT 轨迹的目录中新建脚本，生成 <code class="inline">POSCAR_avg_600K</code>：</p>
+      <details>
+        <summary>展开 / 折叠：生成 POSCAR_avg_600K 的 Python 脚本</summary>
+        <pre><code>from ase.io import read, write
+from ase import Atoms
+import numpy as np
+
+traj_file = 'trajectory_nvt_bulk.lammpstrj'
+
+images = read(traj_file, index=':', format='lammps-dump-text')
+print(f"Read {len(images)} frames from {traj_file}")
+
+n_frames = len(images)
+ref = images[0]
+cell = ref.cell.copy()
+
+# 把 LAMMPS 类型映射成真实元素
+orig_symbols = ref.get_chemical_symbols()
+mapping = {'H': 'Cs', 'He': 'I', 'Li': 'Pb'}   # 示例，可根据实际训练模型修改
+symbols = [mapping[s] for s in orig_symbols]
+
+# 收集分数坐标
+frac_all = []
+for img in images:
+    frac_all.append(img.get_scaled_positions())
+frac_all = np.array(frac_all)
+
+frac_unwrapped = frac_all.copy()
+n_atoms = frac_unwrapped.shape[1]
+
+for ia in range(n_atoms):
+    for ic in range(3):
+        x = frac_unwrapped[:, ia, ic]
+        dx = np.diff(x)
+        dx[dx &gt;  0.5] -= 1.0
+        dx[dx &lt; -0.5] += 1.0
+        x_unwrap = np.concatenate([[x[0]], x[0] + np.cumsum(dx)])
+        frac_unwrapped[:, ia, ic] = x_unwrap
+
+# 时间平均 + 折回 [0,1)
+frac_mean = frac_unwrapped.mean(axis=0) % 1.0
+
+avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
+avg_atoms.set_scaled_positions(frac_mean)
+
+out_file = 'POSCAR_avg_600K'
+write(out_file, avg_atoms, format='vasp', direct=True, vasp5=True)
+print(f"Average structure written to {out_file}")</code></pre>
+      </details>
+      <p>得到的 <code class="inline">POSCAR_avg_600K</code> 将作为 V(T) 参考结构。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>准备 0 K / V(T) 参考 VASP 计算</h2>
+      <p>目录组织建议如下：</p>
+      <pre><code>./ref0K
+├── INCAR
+├── KPOINTS
+├── POSCAR_0K
+├── POTCAR
+
+./refVT
+├── INCAR
+├── KPOINTS
+├── POSCAR_avg_600K
+├── POTCAR</code></pre>
+      <p>在 <code class="inline">ref0K</code> 与 <code class="inline">refVT</code> 目录中分别单独跑一次 VASP，确保生成完整的 <code class="inline">vasprun.xml</code>，后面统计会用到。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">4</span>批量 VASP 单点：runs/frame_????</h2>
+      <p>利用你前面“批量 VASP 运行手册”中的 Slurm 数组脚本，从 NVT 轨迹抽帧并在：</p>
+      <pre><code>runs/
+  frame_0001/
+  frame_0002/
+  ...
+  frame_0150/</code></pre>
+      <p>下完成单点 VASP 计算。每个 <code class="inline">frame_xxxx</code> 至少要有：</p>
+      <ul>
+        <li><code class="inline">POSCAR</code>, <code class="inline">INCAR</code>, <code class="inline">KPOINTS</code>, <code class="inline">POTCAR</code></li>
+        <li><code class="inline">vasprun.xml</code>：包含能带与占据，用于后续解析带边。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">5</span>收集 VBM/CBM 并计算带边位移</h2>
+      <p>使用下面的 Python 脚本批量收集每帧的 Ev/Ec/Eg，并相对 0K / V(T) 计算 ΔEv / ΔEc / ΔEg。</p>
+      <details>
+        <summary>展开 / 折叠：collect_epc_edges.py 完整脚本</summary>
+        <pre><code>#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+'''
+collect_epc_edges.py
+批量收集 VBM/CBM 并计算 EPC 带边漂移（相对参考计算的 ΔEv/ΔEc/ΔEg）。
+
+示例：
+  # 1) 全 k 点搜索 VBM/CBM（做完整能隙）
+  python collect_epc_edges.py --runs-root runs --out edges.tsv
+
+  # 2) 只在 R 点采样（比如 3x3x3 超胞 Γ-only 等效原胞 R 点）
+  python collect_epc_edges.py --runs-root runs --target-k 0.5 0.5 0.5 --ktol 5e-4 --out edges_R.tsv
+
+  # 3) 搭配 0K 和 V(T) 参考（各自有 vasprun.xml）
+  python collect_epc_edges.py --runs-root runs --target-k 0.5 0.5 0.5 \
+      --ref0K ref0K --refVT refVT --out edges_R.tsv
+'''
+import os, re, glob, math, argparse, xml.etree.ElementTree as ET
+
+def frac_minimg_dist2(a, b):
+    '''最小镜像度量（分数坐标），用于匹配目标 k 点'''
+    s = 0.0
+    for i in range(3):
+        d = abs(a[i] - b[i]) % 1.0
+        d = min(d, 1.0 - d)
+        s += d * d
+    return s
+
+def read_vasprun(dirpath):
+    '''从目录读取 vasprun.xml，返回 dict:
+       {'kpts': [[fx,fy,fz],...], 'energies': spins x nk x nb, 'occs': 同维度, 'efermi': float }'''
+    vr = os.path.join(dirpath, "vasprun.xml")
+    if not os.path.isfile(vr):
+        raise FileNotFoundError(f"[ERR] {dirpath} 缺少 vasprun.xml")
+
+    root = ET.parse(vr).getroot()
+
+    # 1) 选最后一次 calculation
+    calcs = root.findall(".//calculation")
+    if not calcs:
+        raise RuntimeError(f"[ERR] {dirpath} vasprun.xml 未找到 &lt;calculation&gt;")
+    calc = calcs[-1]
+
+    # 2) 取 E-fermi
+    efermi = None
+    node = calc.find(".//dos/i[@name='efermi']")
+    if node is not None and node.text:
+        try:
+            efermi = float(node.text)
+        except:
+            pass
+    if efermi is None:
+        node = root.find(".//dos/i[@name='efermi']")
+        if node is not None and node.text:
+            try:
+                efermi = float(node.text)
+            except:
+                pass
+    if efermi is None and os.path.isfile(os.path.join(dirpath, "OUTCAR")):
+        with open(os.path.join(dirpath, "OUTCAR"), "r", errors="ignore") as f:
+            txt = f.read()
+        hits = re.findall(r"E-fermi\s*:\s*([-\d\.Ee+]+)", txt)
+        if hits:
+            efermi = float(hits[-1])
+    if efermi is None:
+        efermi = float("nan")
+
+    # 3) k 点坐标
+    kpts = []
+    varr = calc.find(".//varray[@name='kpointlist']")
+    if varr is None:
+        varr = root.find(".//kpoints/varray[@name='kpointlist']")
+    if varr is None:
+        varr = root.find(".//varray[@name='kpoints']")
+    if varr is None:
+        raise RuntimeError(f"[ERR] {dirpath} vasprun.xml 未找到 k 点列表")
+    for v in varr.findall("v"):
+        toks = v.text.strip().split()
+        if len(toks) &gt;= 3:
+            kpts.append([float(toks[0]), float(toks[1]), float(toks[2])])
+    nk = len(kpts)
+    if nk == 0:
+        raise RuntimeError(f"[ERR] {dirpath} k 点数为 0？")
+
+    # 4) 本征值与占据
+    earr = calc.find(".//eigenvalues/array/set")
+    if earr is None:
+        earr = calc.find(".//eigenvalues/array")
+    if earr is None:
+        raise RuntimeError(f"[ERR] {dirpath} 未找到 eigenvalues/array")
+
+    spin_sets = earr.findall("set")
+    if not spin_sets:
+        spin_sets = [earr]
+    energies = []
+    occs = []
+    for sset in spin_sets:
+        ksets = sset.findall("set")
+        if not ksets:
+            ksets = sset.findall(".//set")
+        if not ksets:
+            raise RuntimeError(f"[ERR] {dirpath} eigenvalues 结构异常（无 k-set）")
+        Ek = []
+        Ok = []
+        for kset in ksets:
+            bands = []
+            occv = []
+            for r in kset.findall("r"):
+                toks = r.text.strip().split()
+                if len(toks) &gt;= 2:
+                    bands.append(float(toks[0]))
+                    occv.append(float(toks[1]))
+            if not bands:
+                for bb in kset.findall("set"):
+                    r = bb.find("r")
+                    if r is not None and r.text:
+                        t = r.text.strip().split()
+                        bands.append(float(t[0]))
+                        occv.append(float(t[1]))
+            if not bands:
+                raise RuntimeError(f"[ERR] {dirpath} 解析 band 能量失败")
+            Ek.append(bands)
+            Ok.append(occv)
+        energies.append(Ek)
+        occs.append(Ok)
+    nb = len(energies[0][0])
+    for s in range(len(energies)):
+        if len(energies[s]) != nk:
+            raise RuntimeError(f"[ERR] {dirpath} spin-{s} 的 k 数与 kpts 数不一致")
+        for k in range(nk):
+            if len(energies[s][k]) != nb:
+                raise RuntimeError(f"[ERR] {dirpath} k-{k} 的 band 数不一致")
+
+    return {"kpts": kpts, "energies": energies, "occs": occs, "efermi": efermi}
+
+def find_k_index(kpts, target, ktol=1e-3):
+    best, bestd = None, 1e9
+    for i, k in enumerate(kpts):
+        d2 = frac_minimg_dist2(k, target)
+        if d2 &lt; bestd:
+            bestd, best = d2, i
+    if best is None or math.sqrt(bestd) &gt; ktol:
+        return None
+    return best
+
+def band_edges(data, target_k=None, ktol=1e-3, occ_thres=0.5):
+    '''返回 {Ev, Ec, Eg, kv, bv, kc, bc, efermi}。target_k=None 表示全 BZ 搜索。'''
+    spins = len(data["energies"])
+    nk = len(data["kpts"])
+    nb = len(data["energies"][0][0])
+
+    if target_k is not None:
+        ki = find_k_index(data["kpts"], target_k, ktol)
+        if ki is None:
+            raise RuntimeError(f"[ERR] 未能在 ktol={ktol} 内匹配目标 k 点 {target_k}")
+        klist = [ki]
+    else:
+        klist = list(range(nk))
+
+    Ev, kv, bv = -1e99, -1, -1
+    Ec, kc, bc =  1e99, -1, -1
+    for s in range(spins):
+        for k in klist:
+            Eb = data["energies"][s][k]
+            Ob = data["occs"][s][k]
+            for b in range(nb):
+                e, o = Eb[b], Ob[b]
+                if o &gt;= occ_thres and e &gt; Ev:
+                    Ev, kv, bv = e, k, b
+                if o &lt;  occ_thres and e &lt; Ec:
+                    Ec, kc, bc = e, k, b
+    Eg = Ec - Ev if (Ec &lt; 1e90 and Ev &gt; -1e90) else float("nan")
+    return {"Ev": Ev, "Ec": Ec, "Eg": Eg, "kv": kv, "bv": bv, "kc": kc, "bc": bc, "efermi": data["efermi"]}
+
+def load_ref(refdir, target_k, ktol, occ_thres):
+    if refdir is None:
+        return (float("nan"), float("nan"), float("nan"))
+    ref = read_vasprun(refdir)
+    ed = band_edges(ref, target_k=target_k, ktol=ktol, occ_thres=occ_thres)
+    return (ed["Ev"], ed["Ec"], ed["Eg"])
+
+def mean_std(vals):
+    vals = [v for v in vals if not (math.isnan(v) or math.isinf(v))]
+    if not vals:
+        return (float("nan"), float("nan"))
+    m = sum(vals) / len(vals)
+    v = sum((x - m) ** 2 for x in vals) / len(vals)
+    return (m, math.sqrt(v))
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs-root", default="runs", help="包含 frame_* 子目录的根路径")
+    ap.add_argument("--glob", default="frame_*", help="在 runs-root 下匹配的子目录通配符")
+    ap.add_argument("--target-k", nargs=3, type=float, default=None,
+                    help="仅在该分数坐标 k 点上取边（如 0.5 0.5 0.5 为 R 点）")
+    ap.add_argument("--ktol", type=float, default=1e-3, help="匹配目标 k 点的公差（分数坐标）")
+    ap.add_argument("--occ-thres", type=float, default=0.5, help="占据阈值（&gt;= thres 为价带）")
+    ap.add_argument("--ref0K", default=None, help="0 K 参考目录（含 vasprun.xml）")
+    ap.add_argument("--refVT", default=None, help="V(T) 参考目录（含 vasprun.xml）")
+    ap.add_argument("--out", default="edges.tsv", help="输出 TSV 路径")
+    args = ap.parse_args()
+
+    target_k = tuple(args.target_k) if args.target_k is not None else None
+
+    Ev0, Ec0, Eg0 = load_ref(args.ref0K, target_k, args.ktol, args.occ_thres)
+    EvT, EcT, EgT = load_ref(args.refVT, target_k, args.ktol, args.occ_thres)
+
+    pattern = os.path.join(args.runs_root, args.glob)
+    run_dirs = sorted([d for d in glob.glob(pattern) if os.path.isdir(d)])
+
+    rows = []
+    for d in run_dirs:
+        frame_id = os.path.basename(d)
+        try:
+            data = read_vasprun(d)
+            ed   = band_edges(data, target_k=target_k, ktol=args.ktol, occ_thres=args.occ_thres)
+            Ev, Ec, Eg = ed["Ev"], ed["Ec"], ed["Eg"]
+            dv0 = Ev - Ev0 if not math.isnan(Ev0) else float("nan")
+            dc0 = Ec - Ec0 if not math.isnan(Ec0) else float("nan")
+            dg0 = Eg - Eg0 if not math.isnan(Eg0) else float("nan")
+            dvT = Ev - EvT if not math.isnan(EvT) else float("nan")
+            dcT = Ec - EcT if not math.isnan(EcT) else float("nan")
+            dgT = Eg - EgT if not math.isnan(EgT) else float("nan")
+            rows.append({
+                "frame": frame_id,
+                "Ev": Ev, "Ec": Ec, "Eg": Eg,
+                "kv": ed["kv"], "bv": ed["bv"], "kc": ed["kc"], "bc": ed["bc"],
+                "EF": ed["efermi"],
+                "dEv_0K": dv0, "dEc_0K": dc0, "dEg_0K": dg0,
+                "dEv_VT": dvT, "dEc_VT": dcT, "dEg_VT": dgT,
+            })
+            print(f"[OK] {frame_id}: Ev={Ev:.4f} Ec={Ec:.4f} Eg={Eg:.4f}")
+        except Exception as e:
+            print(f"[WARN] {frame_id}: {e}")
+            rows.append({
+                "frame": frame_id,
+                "Ev": float("nan"), "Ec": float("nan"), "Eg": float("nan"),
+                "kv": -1, "bv": -1, "kc": -1, "bc": -1,
+                "EF": float("nan"),
+                "dEv_0K": float("nan"), "dEc_0K": float("nan"), "dEg_0K": float("nan"),
+                "dEv_VT": float("nan"), "dEc_VT": float("nan"), "dEg_VT": float("nan"),
+            })
+
+    header = ["frame","Ev","Ec","Eg","kv","bv","kc","bc","EF","dEv_0K","dEc_0K","dEg_0K","dEv_VT","dEc_VT","dEg_VT"]
+    with open(args.out, "w") as f:
+        f.write("\t".join(header) + "\n")
+        for r in rows:
+            f.write("\t".join(
+                [str(r[k]) if not isinstance(r[k], float) else (f"{r[k]:.8f}" if not math.isnan(r[k]) else "nan")
+                 for k in header]
+            ) + "\n")
+    print(f"[Saved] {args.out}")
+
+    def col(key): return [r[key] for r in rows if not math.isnan(r[key])]
+    for label, key in [("Ev", "Ev"), ("Ec","Ec"), ("Eg","Eg"),
+                       ("ΔEv vs 0K","dEv_0K"), ("ΔEc vs 0K","dEc_0K"), ("ΔEg vs 0K","dEg_0K"),
+                       ("ΔEv vs V(T)","dEv_VT"), ("ΔEc vs V(T)","dEc_VT"), ("ΔEg vs V(T)","dEg_VT")]:
+        m, s = mean_std(col(key))
+        if not math.isnan(m):
+            print(f"[STAT] {label}: mean={m:.4f} eV  std={s:.4f} eV")
+        else:
+            print(f"[STAT] {label}: n/a")
+
+if __name__ == "__main__":
+    main()</code></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">6</span>典型命令行示例</h2>
+      <p>在包含 <code class="inline">runs/</code>、<code class="inline">ref0K/</code>、<code class="inline">refVT/</code> 的目录中执行：</p>
+      <details>
+        <summary>展开 / 折叠：命令示例</summary>
+        <pre><code># 1) 全 BZ 搜索带边（不指定 target-k）
+python collect_epc_edges.py --runs-root runs --ref0K ref0K --refVT refVT --out edges.tsv
+
+# 2) 只在 R 点 (0.5, 0.5, 0.5) 上取带边
+python collect_epc_edges.py --runs-root runs     --target-k 0.5 0.5 0.5 --ktol 5e-4     --ref0K ref0K --refVT refVT     --out edges_R.tsv</code></pre>
+      </details>
+      <p>输出的 <code class="inline">edges.tsv</code> / <code class="inline">edges_R.tsv</code> 中包含：</p>
+      <ul>
+        <li>每帧的绝对带边：<code class="inline">Ev</code>, <code class="inline">Ec</code>, <code class="inline">Eg</code></li>
+        <li>相对 0 K 的位移：<code class="inline">dEv_0K</code>, <code class="inline">dEc_0K</code>, <code class="inline">dEg_0K</code></li>
+        <li>相对 V(T) 的位移：<code class="inline">dEv_VT</code>, <code class="inline">dEc_VT</code>, <code class="inline">dEg_VT</code></li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      带边位移计算手册（EPC） · 浏览器直接打开 · 上面步骤说明 + 下面可折叠脚本和命令
+    </div>
+  </div>
+</body>
+</html>
