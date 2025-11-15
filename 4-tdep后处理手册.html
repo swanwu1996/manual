@@ -543,7 +543,8 @@ phonon_dispersion_relations --dos --qpoint_grid 18 18 18 --unit mev | tee log.ph
       <p>将下列脚本保存为 <code class="inline">calc_Fvib_600K.sh</code>，默认读取 <code class="inline">outfile.phonon_dos</code> 与 <code class="inline">infile.ssposcar</code>：</p>
       <details>
         <summary>展开 / 折叠 calc_Fvib_600K.sh</summary>
-        <pre><code>#!/bin/bash
+        <pre><code>
+#!/bin/bash
 # 计算 TDEP 输出 outfile.phonon_dos 的 F_vib(T) （默认 T=600 K）
 # 用 infile.ssposcar 第 7 行的原子数求 N，再用 DOS 做数值积分
 # 用法：
@@ -565,7 +566,7 @@ if [ ! -f "$ssposcar" ]; then
 fi
 
 # 从 infile.ssposcar 第 7 行把所有元素个数加起来 -> N
-N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s}' "$ssposcar")
+N=$(awk 'NR==7{for(i=1;i<=NF;i++) s+=$i; print s}' "$ssposcar")
 
 echo "使用 DOS 文件: $dosfile"
 echo "使用结构文件: $ssposcar"
@@ -586,7 +587,7 @@ BEGIN{
 }
 
 # 跳过注释行，只要有两列以上的数：E(meV)  DOS(E)
-$1 !~ /^#/ && NF &gt;= 2 {
+$1 !~ /^#/ && NF >= 2 {
   E = $1
   D = $2
 
@@ -599,8 +600,8 @@ $1 !~ /^#/ && NF &gt;= 2 {
 
   dE = E - pE
 
-  # 只在区间两端都 &gt;0 的时候积分（丢掉虚频区间）
-  if (E &gt; 0 &amp;&amp; pE &gt; 0) {
+  # 只在区间两端都 >0 的时候积分（丢掉虚频区间）
+  if (E > 0 && pE > 0) {
     # 对纯 DOS 积分：梯形法
     Davg = 0.5*(D + pD)
     area += Davg * dE
@@ -614,15 +615,15 @@ $1 !~ /^#/ && NF &gt;= 2 {
   }
 
   # 标记是否有负频（虚频）
-  if (E &lt; 0 || pE &lt; 0) neg = 1
+  if (E < 0 || pE < 0) neg = 1
 
   pE = E
   pD = D
 }
 
 END{
-  if (area &lt;= 0) {
-    print "ERROR: 没有正能量区间可积（area &lt;= 0），检查 DOS 或虚频情况。"
+  if (area <= 0) {
+    print "ERROR: 没有正能量区间可积（area <= 0），检查 DOS 或虚频情况。"
     exit 1
   }
 
@@ -634,24 +635,21 @@ END{
   F_atom_eV  = F_cell_eV / N
 
   print ""
-  printf("positive-area(raw) = %.6f (meV)
-", area)
-  printf("scale factor       = %.6f (target modes = %.1f)
-", scale, modes)
+  printf("positive-area(raw) = %.6f (meV)\n", area)
+  printf("scale factor       = %.6f (target modes = %.1f)\n", scale, modes)
   print "-----------------------------------------------"
-  printf("F_vib(T=%.1f K) = %.6f eV/atom
-", T, F_atom_eV)
-  printf("F_vib(T=%.1f K) = %.6f eV/cell  (N = %d)
-",
+  printf("F_vib(T=%.1f K) = %.6f eV/atom\n", T, F_atom_eV)
+  printf("F_vib(T=%.1f K) = %.6f eV/cell  (N = %d)\n",
          T, F_cell_eV, N)
   print "-----------------------------------------------"
 
   if (neg) {
-    print "Note: 检测到虚频(负能量)，只对 E&gt;0 区间做积分并重归一化到 3N 模。"
+    print "Note: 检测到虚频(负能量)，只对 E>0 区间做积分并重归一化到 3N 模。"
     print "      结果为近似值，建议以后在改进力常数/去虚频后再对比一次。"
   }
 }
-' "$dosfile"</code></pre>
+' "$dosfile"
+        </code></pre>
       </details>
     </section>
 
