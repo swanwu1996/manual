@@ -401,11 +401,7 @@ done</code></pre>
       </h2>
       <p><code class="inline">meta</code> 包含原子数、帧数、时间步长（fs）、名义温度（K）：</p>
       <pre><code># 若 80 帧来自 ~1 ns，则每帧间隔 ~12.5 ps = 12500 fs
-printf "%d
-%d
-%.1f
-%.1f
-" "$N" "$Nt" 12500.0 600.0 &gt; infile.meta</code></pre>
+printf "%d\n%d\n%.1f\n%.1f\n" "$N" "$Nt" 12500.0 600.0 > infile.meta</code></pre>
     </section>
 
     <!-- Step 8: 快速一致性自检 -->
