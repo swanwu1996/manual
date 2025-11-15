@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>TDEP 使用手册（完整流程）</title>
+  <title>TDEP 使用手册（统一脚本版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
@@ -77,12 +77,6 @@
     h2 small {
       font-weight: 500;
       color: #555;
-    }
-
-    h3 {
-      font-size: 1rem;
-      margin: 0.4rem 0 0.4rem;
-      color: #111827;
     }
 
     p {
@@ -210,10 +204,10 @@
 <body>
   <div class="page">
     <header>
-      <h1>TDEP 使用手册</h1>
-      <p>一次性生成 TDEP 所需 6 个文件，并完成后处理（满血版流程）</p>
+      <h1>TDEP 使用手册（统一脚本版）</h1>
+      <p>用一个 bash 脚本一次性生成 TDEP 所需 7 个 infile.*，再完成打包和后处理</p>
       <div class="meta">
-        <span>written by<code class="inline">qhwu </code></span>
+        <span>written by<code class="inline"> qhwu </code></span>
         <span>环境：VASP + TDEP</span>
         <span>示例温度：600 K</span>
       </div>
@@ -225,47 +219,78 @@
         <span class="step">0</span>
         目录与输入假设
       </h2>
-      <p>默认目录结构如下，每个 <code class="inline">frame_xxxx</code> 存放一帧的 POSCAR 与 OUTCAR：</p>
+      <p>默认在 <code class="inline">runs/</code> 目录下，每个子目录是一次 VASP 单点计算，命名不作强制要求（可以是 <code class="inline">frame_0001</code>、<code class="inline">0001</code>、<code class="inline">vasp-0001</code> 等）。</p>
       <pre><code>runs/
-  frame_0001/ POSCAR  OUTCAR
-  frame_0002/ POSCAR  OUTCAR
+  0001/       POSCAR  OUTCAR(.gz)
+  0002/       POSCAR  OUTCAR(.gz)
+  vasp-0003/  POSCAR  OUTCAR(.gz)
   ...
-  frame_0080/ POSCAR  OUTCAR
 </code></pre>
       <ul>
-        <li>每个 <code class="inline">POSCAR</code> 为对应帧结构，建议使用 <code class="inline">Direct</code> 分数坐标。</li>
-        <li>每个 <code class="inline">OUTCAR</code> 为对应帧的 VASP 单点，包含 <code class="inline">TOTAL-FORCE</code> 块。</li>
-        <li>物种顺序（示例：<code class="inline">Cs I Pb</code>）在所有帧保持一致，原子总数 <code class="inline">N</code> 不变。</li>
+        <li>每个子目录下必须包含：<code class="inline">POSCAR</code> 和 <code class="inline">OUTCAR</code>（或 <code class="inline">OUTCAR.gz</code>）。</li>
+        <li><code class="inline">POSCAR</code> 建议使用 <code class="inline">Direct</code> 分数坐标；若为 <code class="inline">Cartesian</code>，请先转换为 <code class="inline">Direct</code>。</li>
+        <li>物种顺序（如 <code class="inline">Cs I Pb</code>）在所有帧保持一致，原子总数 <code class="inline">N</code> 不变。</li>
+        <li>建议将 <code class="inline">ref0K/</code>、<code class="inline">refVT/</code> 等参考计算放在 <code class="inline">runs/</code> 之外，避免被误识别为帧目录。</li>
       </ul>
     </section>
 
-    <!-- Step 1: 生成时间平均参考超胞 -->
+    <!-- Step 1: 一键脚本 -->
     <section class="card">
       <h2>
         <span class="step">1</span>
-        生成时间平均参考超胞 <small>POSCAR_avg_600K</small>
+        一键生成 7 个 infile.* 文件 <small>统一脚本</small>
       </h2>
-      <p>在 <code class="inline">runs/</code> 下运行以下 Python 脚本，从 LAMMPS 轨迹计算时间平均结构：</p>
+      <p>在 <code class="inline">runs/</code> 目录下保存下面脚本为 <code class="inline">make_tdep_inputs.sh</code>，并赋予执行权限：</p>
+      <pre><code>chmod +x make_tdep_inputs.sh
+./make_tdep_inputs.sh traj_VI0_nvt.lammpstrj 600 12500</code></pre>
+      <p>执行完成后，将生成：</p>
+      <ul>
+        <li><code class="inline">infile.ssposcar</code> / <code class="inline">infile.ucposcar</code></li>
+        <li><code class="inline">infile.positions</code> / <code class="inline">infile.forces</code></li>
+        <li><code class="inline">infile.lattice</code> / <code class="inline">infile.meta</code></li>
+        <li><code class="inline">infile.stat</code></li>
+      </ul>
       <details>
-        <summary>展开 / 折叠 Python 代码</summary>
-        <pre><code>from ase.io import read, write
-from ase.io.lammpsrun import read_lammps_dump
+        <summary>展开 / 折叠：make_tdep_inputs.sh 完整脚本</summary>
+        <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+# ================= 用户可调参数 =================
+TRAJ=${1:-traj_VI0_nvt.lammpstrj}   # NVT 轨迹文件名（默认 traj_VI0_nvt.lammpstrj）
+TEMP_K=${2:-600}                    # 名义温度，用于 infile.meta / infile.stat（默认 600 K）
+DT_FS=${3:-12500}                   # 帧间隔（fs），用于 infile.meta / infile.stat（默认 12500 fs）
+# ==============================================
+
+echo "[info] trajectory    = ${TRAJ}"
+echo "[info] T (meta/stat) = ${TEMP_K} K"
+echo "[info] Δt (meta/stat)= ${DT_FS} fs"
+echo
+
+# 0) 用 ASE 从 LAMMPS 轨迹生成时间平均超胞 POSCAR_avg_600K
+if [[ ! -f "${TRAJ}" ]]; then
+  echo "[ERR] 找不到轨迹文件: ${TRAJ}"
+  exit 1
+fi
+
+python &lt;&lt; PY
+from ase.io import read, write
 from ase import Atoms
 import numpy as np
 
-traj_file = 'trajectory_nvt_bulk.lammpstrj'
+traj_file = "${TRAJ}"
 
-images = read(traj_file, index=':', format='lammps-dump-text')
-
-print(f"Read {len(images)} frames from {traj_file}")
+images = read(traj_file, index=":", format="lammps-dump-text")
+print(f"[PY] Read {len(images)} frames from {traj_file}")
+if len(images) == 0:
+    raise RuntimeError("No frames found in trajectory")
 
 n_frames = len(images)
 ref = images[0]
 cell = ref.cell.copy()
 
-# 把 H/He/Li 映射成 Cs/I/Pb
+# 把 LAMMPS 类型映射成真实元素（按你的体系修改）
 orig_symbols = ref.get_chemical_symbols()
-mapping = {'H': 'Cs', 'He': 'I', 'Li': 'Pb'}
+mapping = {"H": "Cs", "He": "I", "Li": "Pb"}   # ★ 如有需要请改成你自己的映射
 symbols = [mapping[s] for s in orig_symbols]
 
 # 收集分数坐标
@@ -283,7 +308,7 @@ for ia in range(n_atoms):
         dx = np.diff(x)
         dx[dx &gt;  0.5] -= 1.0
         dx[dx &lt; -0.5] += 1.0
-        x_unwrap = np.concatenate([[x[0]], x[0] + np.cumsum(dx)])
+        x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
         frac_unwrapped[:, ia, ic] = x_unwrap
 
 # 时间平均 + 折回 [0,1)
@@ -292,196 +317,136 @@ frac_mean = frac_unwrapped.mean(axis=0) % 1.0
 avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
 avg_atoms.set_scaled_positions(frac_mean)
 
-out_file = 'POSCAR_avg_600K'
-write(out_file, avg_atoms, format='vasp', direct=True, vasp5=True)
+out_file = "POSCAR_avg_600K"
+write(out_file, avg_atoms, format="vasp", direct=True, vasp5=True)
+print(f"[PY] Average structure written to {out_file}")
+PY
 
-print(f"Average structure written to {out_file}")</code></pre>
-      </details>
-      <p>生成的平均结构将写入 <code class="inline">POSCAR_avg_600K</code>。</p>
-    </section>
+# 1) 参考超胞（时间平均）：复制为 ss / uc 两个输入
+cp POSCAR_avg_600K infile.ssposcar
+cp POSCAR_avg_600K infile.ucposcar
+echo "[OK] infile.ssposcar / infile.ucposcar"
 
-    <!-- Step 2: 生成参考超胞文件 -->
-    <section class="card">
-      <h2>
-        <span class="step">2</span>
-        生成参考超胞文件 <small>infile.ssposcar / infile.ucposcar</small>
-      </h2>
-      <p>在同一目录下执行：</p>
-      <pre><code>cp POSCAR_avg_600K infile.ssposcar
-cp POSCAR_avg_600K infile.ucposcar</code></pre>
-    </section>
+# 2) 读原子数 N &amp; 自动识别 VASP 帧目录
+if ! N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar); then
+  echo "[ERR] 无法从 infile.ssposcar 读出第 7 行原子数"
+  exit 1
+fi
 
-    <!-- Step 3: 统计 N 与 Nt -->
-    <section class="card">
-      <h2>
-        <span class="step">3</span>
-        原子总数 N 与帧数 Nt
-      </h2>
-      <p>统计原子总数 <code class="inline">N</code> 与帧数 <code class="inline">Nt</code>：</p>
-      <pre><code>N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s}' infile.ssposcar)
-frames=(frame_????)    # 自动匹配 frame_0001…frame_*
-Nt=${#frames[@]}
-echo "N=$N, Nt=$Nt"</code></pre>
-    </section>
+echo "[info] 扫描当前目录下的 VASP 帧目录（含 POSCAR + OUTCAR/OUTCAR.gz）..."
 
-    <!-- Step 4: 拼接 positions -->
-    <section class="card">
-      <h2>
-        <span class="step">4</span>
-        拼接 positions <small class="badge">infile.positions</small>
-      </h2>
-      <p>按每帧 <code class="inline">N</code> 行，从各帧 <code class="inline">POSCAR</code> 的坐标段提取分数坐标：</p>
-      <details>
-        <summary>展开 / 折叠 shell 脚本（positions）</summary>
-        <pre><code>rm -f infile.positions
-# 读总原子数（以 infile.ssposcar 为准）
-N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar)
+FRAMES=()
+while IFS= read -r d; do
+  name=${d#./}
+  if [[ -f "$name/POSCAR" ]] &amp;&amp; { [[ -f "$name/OUTCAR" ]] || [[ -f "$name/OUTCAR.gz" ]] ; }; then
+    FRAMES+=("$name")
+  fi
+done &lt; &lt;(find . -maxdepth 1 -mindepth 1 -type d | sort -V)
 
-: &gt; infile.positions  # 清空输出文件
+Nt=${#FRAMES[@]}
+if (( Nt == 0 )); then
+  echo "[ERR] 当前目录下没有找到任何同时包含 POSCAR 和 OUTCAR(或 OUTCAR.gz) 的 VASP 计算目录"
+  exit 1
+fi
 
-# 遍历帧
-for d in $(ls -1d frame_???? | sort -V); do
-  pos="$d/POSCAR"
+echo "[info] N (atoms)     = ${N}"
+echo "[info] Nt (frames)   = ${Nt}"
+printf "[info] 识别到的帧目录："; printf " %s" "${FRAMES[@]}"; printf "
 
-  # 找出 "Direct" 或 "Cartesian" 所在的行号（不区分大小写）
+"
+
+# 3) 生成 infile.positions（每帧 N 行，POSCAR 分数坐标）
+echo "[info] building infile.positions ..."
+: &gt; infile.positions
+
+for d in "${FRAMES[@]}"; do
+  pos="${d}/POSCAR"
+  [[ -f "$pos" ]] || { echo "[ERR] $d 缺少 POSCAR"; exit 1; }
+
   cline=$(awk 'tolower($1)=="direct" || tolower($1)=="cartesian"{print NR; exit}' "$pos")
-  if [ -z "$cline" ]; then
-    echo "[$d] POSCAR 里找不到 Direct/Cartesian 行"; exit 1
+  if [[ -z "$cline" ]]; then
+    echo "[ERR] [$d] POSCAR 里找不到 Direct/Cartesian 行"
+    exit 1
   fi
 
-  # 读取该行的标签与起始坐标行号
   mode=$(awk -v n="$cline" 'NR==n{print tolower($1)}' "$pos")
   start=$((cline+1))
 
-  if [ "$mode" = "direct" ]; then
-    # 直接把分数坐标抄出来
+  if [[ "$mode" == "direct" ]]; then
     awk -v s="$start" -v n="$N" 'NR&gt;=s &amp;&amp; NR&lt;s+n {print $1,$2,$3}' "$pos" &gt;&gt; infile.positions
   else
-    echo "[$d] 是 Cartesian 坐标：请先转换为 Direct"
+    echo "[ERR] [$d] 是 Cartesian 坐标：请先全部转换为 Direct 再运行本脚本"
+    exit 1
   fi
-done</code></pre>
-      </details>
-    </section>
-
-    <!-- Step 5: forces -->
-    <section class="card">
-      <h2>
-        <span class="step">5</span>
-        拼接 forces <small class="badge">infile.forces</small>
-      </h2>
-      <p>从每帧 <code class="inline">OUTCAR</code> 中提取最后一个 <code class="inline">TOTAL-FORCE</code> 块：</p>
-      <details>
-        <summary>展开 / 折叠 shell 脚本（forces）</summary>
-        <pre><code>rm -f infile.forces
-for d in $(ls -1d frame_???? | sort -V); do
-  s=$(grep -n "POSITION[[:space:]].*TOTAL-FORCE" $d/OUTCAR | tail -1 | cut -d: -f1)
-  awk -v start="$s" -v N="$N" 'NR>=start+2 && NR<start+2+N {printf("%s %s %s\n", $(NF-2),$(NF-1),$NF)}' $d/OUTCAR >> infile.forces
-done</code></pre>
-      </details>
-    </section>
-
-    <!-- Step 6: lattice -->
-    <section class="card">
-      <h2>
-        <span class="step">6</span>
-        拼接 lattice <small class="badge">infile.lattice</small>
-      </h2>
-      <p>从各帧 <code class="inline">POSCAR</code> 第 3–5 行提取晶格向量：</p>
-      <pre><code>rm -f infile.lattice
-for d in $(ls -1d frame_???? | sort -V); do
-  sed -n '3,5p' "$d/POSCAR" &gt;&gt; infile.lattice
-done</code></pre>
-    </section>
-
-    <!-- Step 7: meta -->
-    <section class="card">
-      <h2>
-        <span class="step">7</span>
-        写 meta 文件 <small class="badge">infile.meta</small>
-      </h2>
-      <p><code class="inline">meta</code> 包含原子数、帧数、时间步长（fs）、名义温度（K）：</p>
-      <pre><code># 若 80 帧来自 ~1 ns，则每帧间隔 ~12.5 ps = 12500 fs
-printf "%d\n%d\n%.1f\n%.1f\n" "$N" "$Nt" 12500.0 600.0 > infile.meta</code></pre>
-    </section>
-
-    <!-- Step 8: 快速一致性自检 -->
-    <section class="card">
-      <h2>
-        <span class="step">8</span>
-        快速一致性自检
-      </h2>
-      <p>检查行数、列数及换行：</p>
-      <details>
-        <summary>展开 / 折叠自检脚本</summary>
-        <pre><code>echo "positions 行数=$(wc -l &lt; infile.positions) (应为 N*Nt=$((N*Nt)))"
-echo "forces    行数=$(wc -l &lt; infile.forces)    (应为 N*Nt=$((N*Nt)))"
-echo "lattice   行数=$(wc -l &lt; infile.lattice)   (应为 3*Nt=$((3*Nt)))"
-
-awk '{if (NF!=3)  {print "positions 列数异常: 第",NR,"行"; exit 1}}' infile.positions || exit 1
-awk '{if (NF!=3)  {print "forces 列数异常: 第",NR,"行"; exit 1}}'    infile.forces    || exit 1
-awk '{if (NF!=3)  {print "lattice 列数异常: 第",NR,"行"; exit 1}}'   infile.lattice   || exit 1
-
-# meta 必须 4 行
-[ "$(wc -l &lt; infile.meta)" -eq 4 ] || { echo "infile.meta 不是 4 行"; exit 1; }
-
-# 文件末尾确保有换行（Fortran）
-for f in infile.positions infile.forces infile.lattice infile.meta; do
-  tail -c1 "$f" | od -An -t x1 | grep -q '0a' || printf "
-" &gt;&gt; "$f"
 done
+echo "[OK] infile.positions"
 
-echo "[OK] 基本一致性通过"</code></pre>
-      </details>
-    </section>
+# 4) 生成 infile.forces（每帧取 OUTCAR/OUTCAR.gz 最后一个 TOTAL-FORCE 块）
+echo "[info] building infile.forces ..."
+: &gt; infile.forces
 
-    <!-- Step 9: 生成 stat -->
-    <section class="card">
-      <h2>
-        <span class="step">9</span>
-        生成 infile.stat
-      </h2>
-      <p>将下面脚本保存为 <code class="inline">make_stat.sh</code>，在当前目录执行 <code class="inline">bash make_stat.sh</code>：</p>
-      <details>
-        <summary>展开 / 折叠 make_stat.sh</summary>
-        <pre><code>#!/usr/bin/env bash
-set -euo pipefail
+for d in "${FRAMES[@]}"; do
+  if   [[ -s "$d/OUTCAR.gz" ]]; then src=(gzip -cd -- "$d/OUTCAR.gz")
+  elif [[ -s "$d/OUTCAR"    ]]; then src=(cat        -- "$d/OUTCAR")
+  else
+    echo "[ERR] $d 缺少 OUTCAR/OUTCAR.gz"
+    exit 1
+  fi
 
-# ===== 用户可改参数 =====
-DT_FS=12500    # 帧间隔（fs）
-TEMP_K=600     # 名义温度（K）
-# =======================
+  s=$("${src[@]}" | grep -n "POSITION[[:space:]].*TOTAL-FORCE" | tail -1 | cut -d: -f1)
+  if [[ -z "$s" ]]; then
+    echo "[ERR] [$d] OUTCAR 中找不到 TOTAL-FORCE 块"
+    exit 1
+  fi
 
-# 基本检查
+  "${src[@]}" | awk -v start="$s" -v N="$N" '
+    NR&gt;=start+2 &amp;&amp; NR&lt;start+2+N {printf("%s %s %s
+", $(NF-2),$(NF-1),$NF)}
+  ' &gt;&gt; infile.forces
+done
+echo "[OK] infile.forces"
+
+# 5) 生成 infile.lattice（每帧 3 行晶格向量）
+echo "[info] building infile.lattice ..."
+: &gt; infile.lattice
+
+for d in "${FRAMES[@]}"; do
+  pos="${d}/POSCAR"
+  sed -n '3,5p' "$pos" &gt;&gt; infile.lattice
+done
+echo "[OK] infile.lattice"
+
+# 6) 生成 infile.meta（N, Nt, dt(fs), T(K)）
+printf "%d
+%d
+%.1f
+%.1f
+" "$N" "$Nt" "$DT_FS" "$TEMP_K" &gt; infile.meta
+echo "[OK] infile.meta"
+
+# 7) 生成 infile.stat
+echo "[info] building infile.stat ..."
+
 for f in infile.positions infile.forces infile.lattice infile.meta infile.ssposcar infile.ucposcar; do
-  [[ -s "$f" ]] || { echo "缺文件: $f"; exit 1; }
+  [[ -s "$f" ]] || { echo "[ERR] 缺文件: $f"; exit 1; }
 done
 
-# 统计帧数（以 positions 为准）
-N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar)
 Nt_pos=$(( $(wc -l &lt; infile.positions) / N ))
-echo "检测到 N=$N, Nt(positions)=$Nt_pos"
-
-# 罗列帧目录
-mapfile -t FRAMES &lt; &lt;(ls -1d frame_???? | sort -V)
-Nt_dirs=${#FRAMES[@]}
-if [[ $Nt_dirs -ne $Nt_pos ]]; then
-  echo "警告：目录帧数($Nt_dirs) 与 positions 推断($Nt_pos) 不一致，仍以目录顺序生成 infile.stat"
+echo "[check] Nt(positions) = $Nt_pos"
+if [[ $Nt_pos -ne $Nt ]]; then
+  echo "[warn] 目录帧数($Nt) 与 positions 推断($Nt_pos) 不一致，仍以目录顺序生成 infile.stat"
 fi
 
-echo "生成 infile.stat ..."
 : &gt; infile.stat
-
 i=0
 for d in "${FRAMES[@]}"; do
   i=$(( i + 1 ))
   t_fs=$(( (i-1)*DT_FS ))
 
-  # 读取源：优先 .gz
   if   [[ -s "$d/OUTCAR.gz" ]]; then src=(gzip -cd -- "$d/OUTCAR.gz")
   elif [[ -s "$d/OUTCAR"    ]]; then src=(cat        -- "$d/OUTCAR")
-  else echo "缺 OUTCAR: $d"; exit 1; fi
+  else echo "[ERR] 缺 OUTCAR: $d"; exit 1; fi
 
-  # Ep/Et：优先 "energy  without entropy="，否则退回 TOTEN
   Ep=$("${src[@]}" | awk '
     /energy  without entropy=/ { e=$4 }
     /free  energy   TOTEN/     { t=$5 }
@@ -489,16 +454,15 @@ for d in "${FRAMES[@]}"; do
   ')
   Et="$Ep"
   Ek="0.0"
-  T="$TEMP_K"
+  Tval="$TEMP_K"
 
-  # 取最后一个 in kB 行上的 6 个分量
   stress_vals=$("${src[@]}" | awk '/in kB/ {print $(NF-5),$(NF-4),$(NF-3),$(NF-2),$(NF-1),$NF}' | tail -n 1)
   if [[ -z "$stress_vals" ]]; then
-    echo "[$d] 未找到应力（in kB）"; exit 1
+    echo "[ERR] [$d] 无法在 OUTCAR 中找到应力 (in kB)"
+    exit 1
   fi
   read -r sxx_kB syy_kB szz_kB sxy_kB syz_kB sxz_kB &lt;&lt;&lt; "$stress_vals"
 
-  # kB -&gt; GPa（×0.1）
   sxx=$(awk -v x="$sxx_kB" 'BEGIN{printf("%.6f", x*0.1)}')
   syy=$(awk -v x="$syy_kB" 'BEGIN{printf("%.6f", x*0.1)}')
   szz=$(awk -v x="$szz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
@@ -506,37 +470,58 @@ for d in "${FRAMES[@]}"; do
   syz=$(awk -v x="$syz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
   sxz=$(awk -v x="$sxz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
 
-  # 压力（GPa）：P = - (sxx+syy+szz)/3
   P=$(awk -v a="$sxx" -v b="$syy" -v c="$szz" 'BEGIN{printf("%.6f", -(a+b+c)/3.0)}')
 
-  # 输出（13列）：i t Et Ep Ek T P sxx syy szz sxy syz sxz
   printf "%d %.1f %.10f %.10f %.6f %.1f %.6f %.6f %.6f %.6f %.6f %.6f %.6f
-"          "$i" "$t_fs" "$Et" "$Ep" "$Ek" "$T" "$P" "$sxx" "$syy" "$szz" "$sxy" "$syz" "$sxz"          &gt;&gt; infile.stat
+"          "$i" "$t_fs" "$Et" "$Ep" "$Ek" "$Tval" "$P" "$sxx" "$syy" "$szz" "$sxy" "$syz" "$sxz"          &gt;&gt; infile.stat
 done
 
-# 自检：列数、行尾换行
 awk '{if (NF!=13){print "infile.stat 第",NR,"行列数=",NF,"≠13"; exit 1}} END{print "infile.stat 列数OK(13)"}' infile.stat
 tail -c1 infile.stat | od -An -t x1 | grep -q '0a' || printf "
 " &gt;&gt; infile.stat
-echo "完成：infile.stat（共 $(wc -l &lt; infile.stat) 行，对应 $i 帧）"</code></pre>
+echo "[OK] infile.stat（共 $(wc -l &lt; infile.stat) 行）"
+
+echo
+echo "[check] positions 行数 = $(wc -l &lt; infile.positions) (应为 N*Nt=$((N*Nt)))"
+echo "[check] forces    行数 = $(wc -l &lt; infile.forces)    (应为 N*Nt=$((N*Nt)))"
+echo "[check] lattice   行数 = $(wc -l &lt; infile.lattice)   (应为 3*Nt=$((3*Nt)))"
+
+awk '{if (NF!=3){print "positions 列数异常: 第",NR,"行"; exit 1}}' infile.positions || exit 1
+awk '{if (NF!=3){print "forces 列数异常: 第",NR,"行"; exit 1}}'    infile.forces    || exit 1
+awk '{if (NF!=3){print "lattice 列数异常: 第",NR,"行"; exit 1}}'   infile.lattice   || exit 1
+
+[[ "$(wc -l &lt; infile.meta)" -eq 4 ]] || { echo "[ERR] infile.meta 不是 4 行"; exit 1; }
+
+for f in infile.positions infile.forces infile.lattice infile.meta infile.stat; do
+  tail -c1 "$f" | od -An -t x1 | grep -q '0a' || printf "
+" &gt;&gt; "$f"
+done
+
+echo
+echo "[DONE] TDEP 所需 7 个文件已全部生成："
+echo "       infile.ssposcar  infile.ucposcar"
+echo "       infile.positions infile.forces"
+echo "       infile.lattice   infile.meta"
+echo "       infile.stat"</code></pre>
       </details>
     </section>
 
-    <!-- Step 10: 打包为 outfile.sim.hdf5 -->
+    <!-- Step 2: 打包为 outfile.sim.hdf5 -->
     <section class="card">
       <h2>
-        <span class="step">10</span>
+        <span class="step">2</span>
         打包为 outfile.sim.hdf5
       </h2>
-      <p>关键一步，生成 TDEP 使用的模拟数据文件：</p>
+      <p>在生成 7 个 <code class="inline">infile.*</code> 后，在同一目录执行：</p>
       <pre><code>pack_simulation -npt --temperature 600</code></pre>
+      <p>会生成 <code class="inline">outfile.sim.hdf5</code>，供后续 <code class="inline">extract_forceconstants</code> 等 TDEP 程序使用。</p>
     </section>
 
-    <!-- Step 11: 后处理流程 -->
+    <!-- Step 3: FC2 拟合与声子 DOS -->
     <section class="card">
       <h2>
-        <span class="step">11</span>
-        后处理：FC2 拟合与声子 DOS
+        <span class="step">3</span>
+        拟合 FC2 并计算声子 DOS
       </h2>
       <ol>
         <li>拟合 600 K 有效二阶力常数（FC2）：</li>
@@ -549,10 +534,10 @@ echo "完成：infile.stat（共 $(wc -l &lt; infile.stat) 行，对应 $i 帧�
 phonon_dispersion_relations --dos --qpoint_grid 18 18 18 --unit mev | tee log.ph</code></pre>
     </section>
 
-    <!-- Step 12: 计算 F_vib -->
+    <!-- Step 4: 计算 Fvib -->
     <section class="card">
       <h2>
-        <span class="step">12</span>
+        <span class="step">4</span>
         计算 F<sub>vib</sub>(T)（以 600 K 为例）
       </h2>
       <p>将下列脚本保存为 <code class="inline">calc_Fvib_600K.sh</code>，默认读取 <code class="inline">outfile.phonon_dos</code> 与 <code class="inline">infile.ssposcar</code>：</p>
@@ -601,7 +586,7 @@ BEGIN{
 }
 
 # 跳过注释行，只要有两列以上的数：E(meV)  DOS(E)
-$1 !~ /^#/ && NF >= 2 {
+$1 !~ /^#/ && NF &gt;= 2 {
   E = $1
   D = $2
 
@@ -614,8 +599,8 @@ $1 !~ /^#/ && NF >= 2 {
 
   dE = E - pE
 
-  # 只在区间两端都 >0 的时候积分（丢掉虚频区间）
-  if (E > 0 && pE > 0) {
+  # 只在区间两端都 &gt;0 的时候积分（丢掉虚频区间）
+  if (E &gt; 0 &amp;&amp; pE &gt; 0) {
     # 对纯 DOS 积分：梯形法
     Davg = 0.5*(D + pD)
     area += Davg * dE
@@ -629,15 +614,15 @@ $1 !~ /^#/ && NF >= 2 {
   }
 
   # 标记是否有负频（虚频）
-  if (E < 0 || pE < 0) neg = 1
+  if (E &lt; 0 || pE &lt; 0) neg = 1
 
   pE = E
   pD = D
 }
 
 END{
-  if (area <= 0) {
-    print "ERROR: 没有正能量区间可积（area <= 0），检查 DOS 或虚频情况。"
+  if (area &lt;= 0) {
+    print "ERROR: 没有正能量区间可积（area &lt;= 0），检查 DOS 或虚频情况。"
     exit 1
   }
 
@@ -662,7 +647,7 @@ END{
   print "-----------------------------------------------"
 
   if (neg) {
-    print "Note: 检测到虚频(负能量)，只对 E>0 区间做积分并重归一化到 3N 模。"
+    print "Note: 检测到虚频(负能量)，只对 E&gt;0 区间做积分并重归一化到 3N 模。"
     print "      结果为近似值，建议以后在改进力常数/去虚频后再对比一次。"
   }
 }
@@ -671,7 +656,7 @@ END{
     </section>
 
     <div class="footer">
-      TDEP 打包与后处理流程
+      TDEP 打包与后处理手册（统一脚本版） · 可直接放入工程项目中复用
     </div>
   </div>
 </body>
