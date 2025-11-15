@@ -357,8 +357,7 @@ for d in $(ls -1d frame_???? | sort -V); do
     # 直接把分数坐标抄出来
     awk -v s="$start" -v n="$N" 'NR&gt;=s &amp;&amp; NR&lt;s+n {print $1,$2,$3}' "$pos" &gt;&gt; infile.positions
   else
-    echo "[$d] 是 Cartesian 坐标：请先转换为 Direct（你原脚本里写的是 '''exit1 1''', 应改为 '''exit 1'''）"
-    exit 1
+    echo "[$d] 是 Cartesian 坐标：请先转换为 Direct"
   fi
 done</code></pre>
       </details>
