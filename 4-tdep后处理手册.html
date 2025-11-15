@@ -375,8 +375,7 @@ done</code></pre>
         <pre><code>rm -f infile.forces
 for d in $(ls -1d frame_???? | sort -V); do
   s=$(grep -n "POSITION[[:space:]].*TOTAL-FORCE" $d/OUTCAR | tail -1 | cut -d: -f1)
-  awk -v start="$s" -v N="$N" 'NR&gt;=start+2 &amp;&amp; NR&lt;start+2+N {printf("%s %s %s
-", $(NF-2),$(NF-1),$NF)}'       $d/OUTCAR &gt;&gt; infile.forces
+  awk -v start="$s" -v N="$N" 'NR>=start+2 && NR<start+2+N {printf("%s %s %s\n", $(NF-2),$(NF-1),$NF)}' $d/OUTCAR >> infile.forces
 done</code></pre>
       </details>
     </section>
