@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>FEP 自由能微扰后处理手册（LaTeX 公式版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- MathJax 配置 - 必须在加载脚本之前 -->
+  <script>
+  MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true,
+      processEnvironments: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    },
+    svg: {
+      fontCache: 'global'
+    }
+  };
+  </script>
+  
+  <!-- MathJax 加载 -->
+  <script id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
+
+  <style>
+    :root { font-size: 16px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+      background: #f5f5f7;
+      color: #111827;
+      line-height: 1.8;
+    }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0.2rem 0 0.4rem;
+      color: #2c3e50;
+    }
+    header p {
+      margin: 0.1rem 0;
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      margin-top: 0.3rem;
+    }
+    .meta span {
+      padding: 0.12rem 0.6rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #4b5563;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 0.9rem;
+      padding: 1.2rem 1.3rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.08);
+      border: 1px solid rgba(148,163,184,0.28);
+    }
+    h2 {
+      font-size: 1.05rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      color: #34495e;
+    }
+    h2 span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 999px;
+      background: #1d4ed8;
+      color: #ffffff;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    h2 small {
+      font-weight: 500;
+      color: #6b7280;
+    }
+    p {
+      margin: 0.2rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+    ul, ol {
+      margin: 0.3rem 0 0.6rem;
+      padding-left: 1.2rem;
+      font-size: 0.95rem;
+    }
+    li { margin: 0.15rem 0; }
+    code.inline {
+      padding: 0.08rem 0.35rem;
+      border-radius: 0.4rem;
+      background: #e5e7eb;
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+                   "Liberation Mono", "Courier New", monospace;
+      font-size: 0.83rem;
+    }
+    pre {
+      margin: 0.4rem 0 0.3rem;
+      padding: 0.75rem 0.85rem;
+      border-radius: 0.7rem;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    pre code {
+      font-family: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+                   "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+    }
+    details {
+      margin-top: 0.35rem;
+      border-radius: 0.7rem;
+      background: #f1f5f9;
+      padding: 0.3rem 0.7rem 0.6rem;
+    }
+    details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #111827;
+      padding: 0.35rem 0;
+    }
+    details[open] summary {
+      border-bottom: 1px dashed #cbd5f5;
+      margin-bottom: 0.25rem;
+    }
+    details summary::before {
+      content: "▶";
+      display: inline-block;
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+      color: #4b5563;
+    }
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .formula-box {
+      background-color: #f8f9fa;
+      border: 2px solid #dee2e6;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+    .MJX-TEX {
+      font-size: 1.05em !important;
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 1.6rem;
+      padding-top: 1.2rem;
+      border-top: 1px solid #e5e7eb;
+    }
+    @media (min-width: 768px) {
+      .page { padding: 2rem 1.5rem 3rem; }
+      .card { padding: 1.4rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>FEP 自由能微扰后处理手册</h1>
+      <p>
+        基于 MD 采样的两电荷态 \(q=0, q=+1\) 之间的自由能差 \(\Delta F\)：
+        从 OUTCAR 收集能量，到 Python 一键算 FEP。
+      </p>
+      <div class="meta">
+        <span>Method: Free Energy Perturbation</span>
+        <span>DFT engine: VASP</span>
+        <span>Example: 600 K, VI 缺陷</span>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2><span class="step">0</span>物理背景速览 <small>\(\Delta F\) 的定义</small></h2>
+      <p>考虑两个势能面：</p>
+      <ul>
+        <li>参考态 \(q = 0\)：势能 \(U_0(\mathbf R)\)，MD 在该势面上采样构型 \(\mathbf R\)。</li>
+        <li>目标态 \(q = +1\)：势能 \(U_1(\mathbf R)\)，在相同 \(\mathbf R\) 上重新做单点计算。</li>
+      </ul>
+
+      <div class="formula-box">
+        <p style="text-align:center;">
+          \[
+          \Delta F_{1-0}
+          = -\frac{1}{\beta}
+            \ln \left\langle
+              \exp\bigl[-\beta\bigl(U_1(\mathbf R)-U_0(\mathbf R)\bigr)\bigr]
+            \right\rangle_{0},
+          \qquad
+          \beta = \frac{1}{k_\mathrm{B} T}.
+          \]
+        </p>
+      </div>
+
+      <p>这里 \(\langle \cdots \rangle_0\) 表示在参考势面 \(U_0\) 上的系综平均，实做中由 q=0 的 MD 轨迹离散采样实现。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">1</span>目录约定与前提假设</h2>
+      <p>假设你已经完成了在两个电荷态上的单点能量计算，目录结构类似：</p>
+      <pre><code>2-600-VI-q0/runs/  # q = 0,  每帧一个子目录
+3-600-VI-q1/runs/  # q = +1, 每帧一个子目录</code></pre>
+      <ul>
+        <li>每个 <code class="inline">runs</code> 下面有多个帧目录，例如 <code class="inline">frame_0001</code>、<code class="inline">frame_0002</code> ...</li>
+        <li>每个帧目录中至少包含一个 <code class="inline">OUTCAR</code>（或 <code class="inline">OUTCAR.gz</code>），对应该构型的单点能量。</li>
+        <li>两个电荷态的帧目录一一对应、命名一致（例如 <code class="inline">frame_0001</code> 在 q0 和 q1 目录都存在）。</li>
+        <li>本文示例温度取 \(T = 600~\text{K}\)，实际使用时可自行修改。</li>
+      </ul>
+      <p>如果帧目录命名不是 <code class="inline">frame_0001</code> 样式（例如 <code class="inline">0001</code>、<code class="inline">vasp-0001</code>），可以在脚本中调整 <code class="inline">PATTERN</code> 变量。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>一体化脚本：收集能量并写 \(E_0\) / \(E_1\) 表</h2>
+      <p>在顶层目录（包含 <code class="inline">2-600-VI-q0</code> 和 <code class="inline">3-600-VI-q1</code>）新建脚本 <code class="inline">fep_collect_energies.sh</code>：</p>
+      <details>
+        <summary>展开 / 折叠：fep_collect_energies.sh 完整脚本</summary>
+        <pre><code>#!/usr/bin/env bash
+# 收集 q=0 与 q=+1 两个电荷态的单点能量，生成 E_q0.dat / E_q1.dat
+# 默认假设目录结构：
+#   2-600-VI-q0/runs/frame_*/OUTCAR
+#   3-600-VI-q1/runs/frame_*/OUTCAR
+# 若帧目录命名不同，可修改 PATTERN 变量。
+
+set -euo pipefail
+
+T=600                    # 温度信息仅写在注释里，真正计算在 Python 里再指定
+DIR_Q0="2-600-VI-q0/runs"
+DIR_Q1="3-600-VI-q1/runs"
+PATTERN="frame_*"        # 如需支持 0001/vasp-0001，可改成 "*" 或更细的通配
+
+OUT_Q0="E_q0.dat"
+OUT_Q1="E_q1.dat"
+
+echo "[info] T = ${T} K"
+echo "[info] q=0 dir : ${DIR_Q0}"
+echo "[info] q=+1 dir: ${DIR_Q1}"
+echo "[info] pattern : ${PATTERN}"
+echo
+
+# --- 函数：从某个 runs 目录收集能量 ---
+collect_E () {
+  local runs_dir="$1"
+  local pattern="$2"
+  local outfile="$3"
+
+  if [[ ! -d "$runs_dir" ]]; then
+    echo "[ERR] runs 目录不存在: $runs_dir" >&2
+    return 1
+  fi
+
+  : > "$outfile"
+  echo "[info] collecting energies in $runs_dir → $outfile"
+
+  # 遍历所有匹配的子目录，按名字排序（保证 q0/q1 一致）
+  local d
+  for d in $(cd "$runs_dir" && ls -1d ${pattern} 2>/dev/null | sort); do
+    local outcar=""
+    if   [[ -s "${runs_dir}/${d}/OUTCAR.gz" ]]; then
+      outcar="${runs_dir}/${d}/OUTCAR.gz"
+      E=$(gzip -cd -- "$outcar" | grep "energy  without entropy" | tail -1 | awk '{print $7}')
+    elif [[ -s "${runs_dir}/${d}/OUTCAR"    ]]; then
+      outcar="${runs_dir}/${d}/OUTCAR"
+      E=$(grep "energy  without entropy" "$outcar" | tail -1 | awk '{print $7}')
+    else
+      echo "[warn] 跳过 ${runs_dir}/${d}：找不到 OUTCAR/OUTCAR.gz"
+      continue
+    fi
+
+    if [[ -z "$E" ]]; then
+      echo "[warn] 未在 $outcar 中找到 'energy  without entropy'，跳过 $d"
+      continue
+    fi
+
+    printf "%-20s %18.10f\n" "$d" "$E" >> "$outfile"
+  done
+
+  echo "[info] $(wc -l < "$outfile") 行写入 $outfile"
+  echo
+}
+
+collect_E "$DIR_Q0" "$PATTERN" "$OUT_Q0"
+collect_E "$DIR_Q1" "$PATTERN" "$OUT_Q1"
+
+echo "[DONE] 已生成 $OUT_Q0 / $OUT_Q1 ，下一步用 Python 做 FEP 后处理。"</code></pre>
+      </details>
+
+      <p>赋予执行权限并运行：</p>
+      <pre><code>chmod +x fep_collect_energies.sh
+./fep_collect_energies.sh</code></pre>
+
+      <p>脚本执行后，当前目录会出现两个表格文件：</p>
+      <ul>
+        <li><code class="inline">E_q0.dat</code>：每行 \(\text{帧目录名}\;E_0\,\text{(eV)}\)。</li>
+        <li><code class="inline">E_q1.dat</code>：每行 \(\text{帧目录名}\;E_1\,\text{(eV)}\)。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>Python 一键计算 \(\Delta F\)：FEP 实现</h2>
+      <p>在同一目录新建 <code class="inline">fep_q1_minus_q0.py</code>，读取 <code class="inline">E_q0.dat</code> 与 <code class="inline">E_q1.dat</code>，计算</p>
+
+      <div class="formula-box">
+        <p style="text-align:center;">
+          \[
+          \Delta U_i = E_1^{(i)} - E_0^{(i)}, \qquad
+          \Delta F_{1-0} = -\frac{1}{\beta}
+            \ln \left\langle e^{-\beta \Delta U} \right\rangle_0.
+          \]
+        </p>
+        <p style="text-align:center; font-size:0.9em; color:#555;">
+          数值实现时采用 \(\Delta U\) 的平移技巧：
+          \[
+          \Delta F_{1-0}
+          = -\frac{1}{\beta}
+            \ln \left\langle e^{-\beta (\Delta U - c)} \right\rangle_0
+            + c,
+          \]
+          其中 \(c\) 可取 \(\min(\Delta U)\) 以提高稳定性。
+        </p>
+      </div>
+
+      <details>
+        <summary>展开 / 折叠：fep_q1_minus_q0.py 完整脚本</summary>
+        <pre><code>#!/usr/bin/env python3
+# 从 E_q0.dat / E_q1.dat 计算 ΔF(q=+1 − q=0) （单位 eV）。
+
+import numpy as np
+
+# ---------------- 用户参数区域 ----------------
+T = 600.0                   # 温度（K）
+kB = 8.617333262e-5         # Boltzmann 常数（eV/K）
+file_q0 = "E_q0.dat"
+file_q1 = "E_q1.dat"
+# ------------------------------------------------
+
+def read_energy_table(fname):
+  """读取 '目录名  能量(eV)' 格式的表，返回 names, energies(np.ndarray)"""
+  names = []
+  energies = []
+  with open(fname, "r") as f:
+    for line in f:
+      s = line.strip()
+      if not s:
+        continue
+      parts = s.split()
+      if len(parts) < 2:
+        continue
+      names.append(parts[0])
+      energies.append(float(parts[1]))
+  return names, np.array(energies, dtype=float)
+
+names0, E0 = read_energy_table(file_q0)
+names1, E1 = read_energy_table(file_q1)
+
+print("Read {:d} rows from {}".format(len(E0), file_q0))
+print("Read {:d} rows from {}".format(len(E1), file_q1))
+
+# 把两边的帧按公共集合对齐（以 q=1 的顺序为主）
+map0 = {name: E for name, E in zip(names0, E0)}
+
+common_names = []
+dU_list = []
+for name, E1_i in zip(names1, E1):
+  if name not in map0:
+    print("  [warn] frame {} 在 {} 中找不到，对该帧跳过".format(name, file_q0))
+    continue
+  E0_i = map0[name]
+  common_names.append(name)
+  dU_list.append(E1_i - E0_i)
+
+dU = np.array(dU_list, dtype=float)
+N = len(dU)
+if N == 0:
+  raise RuntimeError("没有找到任何匹配帧，请检查 E_q0.dat / E_q1.dat 的帧命名是否一致")
+
+print("\\n共找到 {:d} 个匹配帧用于 FEP 计算".format(N))
+print("ΔU = E_q1 - E_q0\\n")
+
+beta = 1.0 / (kB * T)
+
+# 数值稳定：减去最小值再做指数平均
+shift = dU.min()
+dU_shifted = dU - shift
+
+log_avg = np.log(np.exp(-beta * dU_shifted).mean())
+dF = -1.0 / beta * log_avg + shift
+
+print("Temperature T       = {:.1f} K".format(T))
+print("Beta (1/eV)         = {:.6e}".format(beta))
+print("min(ΔU)             = {:.6f} eV".format(dU.min()))
+print("mean(ΔU)            = {:.6f} eV".format(dU.mean()))
+print("std(ΔU)             = {:.6f} eV".format(dU.std()))
+print()
+print("ΔF(q=+1 − q=0)      = {:.6f} eV".format(dF))
+print("(by standard forward FEP)")</code></pre>
+      </details>
+
+      <p>运行方式：</p>
+      <pre><code>python fep_q1_minus_q0.py</code></pre>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">4</span>数值稳定性与采样质量检查</h2>
+      <p>FEP 对采样重叠较为敏感，推荐进行以下检查：</p>
+      <ul>
+        <li>查看 \(\Delta U\) 的均值和标准差：若 \(\mathrm{std}(\Delta U)\) 远大于数个 \(k_\mathrm{B}T\)，FEP 收敛可能较差。</li>
+        <li>画 \(\Delta U\) 的直方图，确认不是极端长尾分布。</li>
+        <li>必要时可以做双向 FEP（\(q=0 \to q=+1\) 和 \(q=+1 \to q=0\)）、或 BAR/MBAR 对比。</li>
+        <li>检查能量是否有异常点（单点未收敛、NaN 等）。</li>
+      </ul>
+
+      <details>
+        <summary>可选：用 Python 画 \(\Delta U\) 直方图（示例代码）</summary>
+        <pre><code>#!/usr/bin/env python3
+import numpy as np
+import matplotlib.pyplot as plt
+
+from fep_q1_minus_q0 import read_energy_table  # 若放在同一目录可直接复用
+
+names0, E0 = read_energy_table("E_q0.dat")
+names1, E1 = read_energy_table("E_q1.dat")
+
+m0 = {n: e for n, e in zip(names0, E0)}
+dU = []
+for n, e1 in zip(names1, E1):
+  if n in m0:
+    dU.append(e1 - m0[n])
+
+dU = np.array(dU)
+plt.hist(dU, bins=40)
+plt.xlabel("ΔU (eV)")
+plt.ylabel("Counts")
+plt.title("Histogram of ΔU for FEP")
+plt.show()</code></pre>
+      </details>
+    </section>
+
+    <div class="footer">
+      FEP manual · VASP-based free energy perturbation between charge states
+    </div>
+  </div>
+</body>
+</html>
