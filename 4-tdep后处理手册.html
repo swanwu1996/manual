@@ -241,8 +241,11 @@
         一键生成 7 个 infile.* 文件 <small>统一脚本</small>
       </h2>
       <p>在 <code class="inline">runs/</code> 目录下保存下面脚本为 <code class="inline">make_tdep_inputs.sh</code>，并赋予执行权限：</p>
-      <pre><code>chmod +x make_tdep_inputs.sh
-./make_tdep_inputs.sh traj_VI0_nvt.lammpstrj 600 12500</code></pre>
+      <pre><code># 默认 T=600 K, dt=12500 fs
+python tdep_init.py
+
+# 或者指定温度和时间步长
+python tdep_init.py --temp 800 --dt-fs 10000</code></pre>
       <p>执行完成后，将生成：</p>
       <ul>
         <li><code class="inline">infile.ssposcar</code> / <code class="inline">infile.ucposcar</code></li>
@@ -251,258 +254,361 @@
         <li><code class="inline">infile.stat</code></li>
       </ul>
       <details>
-        <summary>展开 / 折叠：make_tdep_inputs.sh 完整脚本</summary>
-        <pre><code>#!/usr/bin/env bash
-set -euo pipefail
+        <summary>展开 / 折叠：make_tdep_inputs.py 完整脚本</summary>
+        <pre><code>#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-# ================= 用户可调参数 =================
-TRAJ=${1:-traj_VI0_nvt.lammpstrj}   # NVT 轨迹文件名（默认 traj_VI0_nvt.lammpstrj）
-TEMP_K=${2:-600}                    # 名义温度，用于 infile.meta / infile.stat（默认 600 K）
-DT_FS=${3:-12500}                   # 帧间隔（fs），用于 infile.meta / infile.stat（默认 12500 fs）
-# ==============================================
+"""
+TDEP initialization script (Python only, no LAMMPS dump).
 
-echo "[info] trajectory    = ${TRAJ}"
-echo "[info] T (meta/stat) = ${TEMP_K} K"
-echo "[info] Δt (meta/stat)= ${DT_FS} fs"
-echo
+- 自动扫描当前目录下子目录，只要含 POSCAR + OUTCAR/OUTCAR.gz 就认为是一帧
+- 用所有帧的 POSCAR 做时间平均，生成 POSCAR_avg_<TEMP>K
+- 生成:
+    infile.ssposcar  infile.ucposcar
+    infile.positions infile.forces
+    infile.lattice   infile.meta
+    infile.stat
+"""
 
-# 0) 用 ASE 从 LAMMPS 轨迹生成时间平均超胞 POSCAR_avg_600K
-if [[ ! -f "${TRAJ}" ]]; then
-  echo "[ERR] 找不到轨迹文件: ${TRAJ}"
-  exit 1
-fi
+import argparse
+import gzip
+import os
+import re
+import sys
 
-python &lt;&lt; PY
+from typing import List, Tuple
+
+import numpy as np
 from ase.io import read, write
 from ase import Atoms
-import numpy as np
 
-traj_file = "${TRAJ}"
 
-images = read(traj_file, index=":", format="lammps-dump-text")
-print(f"[PY] Read {len(images)} frames from {traj_file}")
-if len(images) == 0:
-    raise RuntimeError("No frames found in trajectory")
+def natural_key(s: str):
+    """用于对 frame1, frame2, frame10 做自然排序，而不是字典序"""
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(r'(\d+)', s)]
 
-n_frames = len(images)
-ref = images[0]
-cell = ref.cell.copy()
 
-# 把 LAMMPS 类型映射成真实元素（按你的体系修改）
-orig_symbols = ref.get_chemical_symbols()
-mapping = {"H": "Cs", "He": "I", "Li": "Pb"}   # ★ 如有需要请改成你自己的映射
-symbols = [mapping[s] for s in orig_symbols]
+def find_frame_dirs() -> List[str]:
+    """查找当前目录下所有含 POSCAR + OUTCAR/OUTCAR.gz 的子目录"""
+    candidates = []
+    for name in os.listdir("."):
+        if not os.path.isdir(name):
+            continue
+        pos = os.path.join(name, "POSCAR")
+        out = os.path.join(name, "OUTCAR")
+        outgz = os.path.join(name, "OUTCAR.gz")
+        if os.path.isfile(pos) and (os.path.isfile(out) or os.path.isfile(outgz)):
+            candidates.append(name)
 
-# 收集分数坐标
-frac_all = []
-for img in images:
-    frac_all.append(img.get_scaled_positions())
-frac_all = np.array(frac_all)
+    candidates.sort(key=natural_key)
+    return candidates
 
-frac_unwrapped = frac_all.copy()
-n_atoms = frac_unwrapped.shape[1]
 
-for ia in range(n_atoms):
-    for ic in range(3):
-        x = frac_unwrapped[:, ia, ic]
-        dx = np.diff(x)
-        dx[dx &gt;  0.5] -= 1.0
-        dx[dx &lt; -0.5] += 1.0
-        x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
-        frac_unwrapped[:, ia, ic] = x_unwrap
+def read_poscars(frame_dirs: List[str]) -> List[Atoms]:
+    images = []
+    for d in frame_dirs:
+        pos_path = os.path.join(d, "POSCAR")
+        try:
+            atoms = read(pos_path, format="vasp")
+        except Exception as e:
+            raise RuntimeError(f"Failed to read {pos_path}: {e}")
+        images.append(atoms)
+    return images
 
-# 时间平均 + 折回 [0,1)
-frac_mean = frac_unwrapped.mean(axis=0) % 1.0
 
-avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
-avg_atoms.set_scaled_positions(frac_mean)
+def build_average_structure(images: List[Atoms], temp_k: float, filename: str) -> Atoms:
+    """用分数坐标 + 周期展开，对所有帧做时间平均，并写出 VASP POSCAR"""
+    if not images:
+        raise RuntimeError("No images to average")
 
-out_file = "POSCAR_avg_600K"
-write(out_file, avg_atoms, format="vasp", direct=True, vasp5=True)
-print(f"[PY] Average structure written to {out_file}")
-PY
+    ref = images[0]
+    cell = ref.cell.copy()
+    symbols = ref.get_chemical_symbols()
 
-# 1) 参考超胞（时间平均）：复制为 ss / uc 两个输入
-cp POSCAR_avg_600K infile.ssposcar
-cp POSCAR_avg_600K infile.ucposcar
-echo "[OK] infile.ssposcar / infile.ucposcar"
+    # 检查每一帧的元素序列是否一致
+    for i, img in enumerate(images):
+        if img.get_chemical_symbols() != symbols:
+            raise RuntimeError(f"Frame {i} symbols mismatch with reference")
 
-# 2) 读原子数 N &amp; 自动识别 VASP 帧目录
-if ! N=$(awk 'NR==7{for(i=1;i&lt;=NF;i++) s+=$i; print s; exit}' infile.ssposcar); then
-  echo "[ERR] 无法从 infile.ssposcar 读出第 7 行原子数"
-  exit 1
-fi
+    frac_all = np.array([img.get_scaled_positions() for img in images])  # (Nt, N, 3)
+    n_frames, n_atoms, _ = frac_all.shape
+    print(f"[PY] n_frames = {n_frames}, n_atoms = {n_atoms}")
 
-echo "[info] 扫描当前目录下的 VASP 帧目录（含 POSCAR + OUTCAR/OUTCAR.gz）..."
+    # 周期展开
+    frac_unwrapped = frac_all.copy()
+    for ia in range(n_atoms):
+        for ic in range(3):
+            x = frac_unwrapped[:, ia, ic]
+            dx = np.diff(x)
+            dx[dx > 0.5] -= 1.0
+            dx[dx < -0.5] += 1.0
+            x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
+            frac_unwrapped[:, ia, ic] = x_unwrap
 
-FRAMES=()
-while IFS= read -r d; do
-  name=${d#./}
-  if [[ -f "$name/POSCAR" ]] &amp;&amp; { [[ -f "$name/OUTCAR" ]] || [[ -f "$name/OUTCAR.gz" ]] ; }; then
-    FRAMES+=("$name")
-  fi
-done &lt; &lt;(find . -maxdepth 1 -mindepth 1 -type d | sort -V)
+    # 时间平均 + 折回 [0,1)
+    frac_mean = frac_unwrapped.mean(axis=0) % 1.0
 
-Nt=${#FRAMES[@]}
-if (( Nt == 0 )); then
-  echo "[ERR] 当前目录下没有找到任何同时包含 POSCAR 和 OUTCAR(或 OUTCAR.gz) 的 VASP 计算目录"
-  exit 1
-fi
+    avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
+    avg_atoms.set_scaled_positions(frac_mean)
 
-echo "[info] N (atoms)     = ${N}"
-echo "[info] Nt (frames)   = ${Nt}"
-printf "[info] 识别到的帧目录："; printf " %s" "${FRAMES[@]}"; printf "
+    write(filename, avg_atoms, format="vasp", direct=True, vasp5=True)
+    print(f"[PY] Average structure written to {filename}")
+    return avg_atoms
 
-"
 
-# 3) 生成 infile.positions（每帧 N 行，POSCAR 分数坐标）
-echo "[info] building infile.positions ..."
-: &gt; infile.positions
+def open_outcar(path_dir: str):
+    outgz = os.path.join(path_dir, "OUTCAR.gz")
+    out = os.path.join(path_dir, "OUTCAR")
+    if os.path.isfile(outgz):
+        return gzip.open(outgz, "rt", errors="ignore")
+    elif os.path.isfile(out):
+        return open(out, "rt", errors="ignore")
+    else:
+        raise FileNotFoundError(f"{path_dir} 缺少 OUTCAR/OUTCAR.gz")
 
-for d in "${FRAMES[@]}"; do
-  pos="${d}/POSCAR"
-  [[ -f "$pos" ]] || { echo "[ERR] $d 缺少 POSCAR"; exit 1; }
 
-  cline=$(awk 'tolower($1)=="direct" || tolower($1)=="cartesian"{print NR; exit}' "$pos")
-  if [[ -z "$cline" ]]; then
-    echo "[ERR] [$d] POSCAR 里找不到 Direct/Cartesian 行"
-    exit 1
-  fi
+def parse_outcar_for_forces_energy_stress(path_dir: str, natoms: int
+                                          ) -> Tuple[np.ndarray, float, float, float, float, float, float, float]:
+    """
+    返回:
+      forces: (N,3) in eV/Å
+      Ep, Et, Ek, T, P(GPa), sxx..sxz(GPa)
+    其中 T 在这里只是占位，用外部传入的 TEMP_K 即可；这里返回的 T=0 占位。
+    """
+    with open_outcar(path_dir) as f:
+        lines = f.readlines()
 
-  mode=$(awk -v n="$cline" 'NR==n{print tolower($1)}' "$pos")
-  start=$((cline+1))
+    # ---- 找最后一个 POSITION ... TOTAL-FORCE 块 ----
+    header_indices = [i for i, line in enumerate(lines)
+                      if "POSITION" in line and "TOTAL-FORCE" in line]
+    if not header_indices:
+        raise RuntimeError(f"[{path_dir}] OUTCAR 中找不到 TOTAL-FORCE 块")
 
-  if [[ "$mode" == "direct" ]]; then
-    awk -v s="$start" -v n="$N" 'NR&gt;=s &amp;&amp; NR&lt;s+n {print $1,$2,$3}' "$pos" &gt;&gt; infile.positions
-  else
-    echo "[ERR] [$d] 是 Cartesian 坐标：请先全部转换为 Direct 再运行本脚本"
-    exit 1
-  fi
-done
-echo "[OK] infile.positions"
+    start = header_indices[-1]
+    forces = []
+    for j in range(start + 2, start + 2 + natoms):
+        try:
+            cols = lines[j].split()
+        except IndexError:
+            raise RuntimeError(f"[{path_dir}] TOTAL-FORCE 块长度不足 N={natoms} 行")
+        if len(cols) < 3:
+            raise RuntimeError(f"[{path_dir}] TOTAL-FORCE 行列数太少: {lines[j].rstrip()}")
+        fx, fy, fz = map(float, cols[-3:])
+        forces.append([fx, fy, fz])
 
-# 4) 生成 infile.forces（每帧取 OUTCAR/OUTCAR.gz 最后一个 TOTAL-FORCE 块）
-echo "[info] building infile.forces ..."
-: &gt; infile.forces
+    forces = np.array(forces)
+    if forces.shape != (natoms, 3):
+        raise RuntimeError(f"[{path_dir}] forces 形状异常: {forces.shape}, 期望 ({natoms},3)")
 
-for d in "${FRAMES[@]}"; do
-  if   [[ -s "$d/OUTCAR.gz" ]]; then src=(gzip -cd -- "$d/OUTCAR.gz")
-  elif [[ -s "$d/OUTCAR"    ]]; then src=(cat        -- "$d/OUTCAR")
-  else
-    echo "[ERR] $d 缺少 OUTCAR/OUTCAR.gz"
-    exit 1
-  fi
+    # ---- 能量: energy without entropy / TOTEN ----
+    e_val = None
+    t_val = None
+    for line in lines:
+        if "energy  without entropy=" in line:
+            parts = line.split()
+            # "... energy  without entropy=   <val>  energy(sigma->0)..."
+            if len(parts) >= 4:
+                try:
+                    e_val = float(parts[3])
+                except ValueError:
+                    pass
+        elif "free  energy   TOTEN" in line:
+            parts = line.split()
+            # "free  energy   TOTEN  =  <val> eV"
+            if len(parts) >= 5:
+                try:
+                    t_val = float(parts[4])
+                except ValueError:
+                    pass
 
-  s=$("${src[@]}" | grep -n "POSITION[[:space:]].*TOTAL-FORCE" | tail -1 | cut -d: -f1)
-  if [[ -z "$s" ]]; then
-    echo "[ERR] [$d] OUTCAR 中找不到 TOTAL-FORCE 块"
-    exit 1
-  fi
+    if e_val is not None:
+        Ep = e_val
+    elif t_val is not None:
+        Ep = t_val
+    else:
+        Ep = 0.0  # 退路
 
-  "${src[@]}" | awk -v start="$s" -v N="$N" '
-    NR&gt;=start+2 &amp;&amp; NR&lt;start+2+N {printf("%s %s %s
-", $(NF-2),$(NF-1),$NF)}
-  ' &gt;&gt; infile.forces
-done
-echo "[OK] infile.forces"
+    Et = Ep
+    Ek = 0.0   # 这里不从 OUTCAR 取动能，保持和原 bash 脚本一致
 
-# 5) 生成 infile.lattice（每帧 3 行晶格向量）
-echo "[info] building infile.lattice ..."
-: &gt; infile.lattice
+    # ---- 应力: 最后一个 "in kB" 行 ----
+    last_stress_vals = None
+    for line in lines:
+        if "in kB" in line:
+            parts = line.split()
+            # 最后 6 项为 xx yy zz xy yz zx (单位 kB)
+            if len(parts) >= 6:
+                try:
+                    vals = list(map(float, parts[-6:]))
+                    last_stress_vals = vals
+                except ValueError:
+                    continue
 
-for d in "${FRAMES[@]}"; do
-  pos="${d}/POSCAR"
-  sed -n '3,5p' "$pos" &gt;&gt; infile.lattice
-done
-echo "[OK] infile.lattice"
+    if last_stress_vals is None:
+        raise RuntimeError(f"[{path_dir}] 无法在 OUTCAR 中找到应力 (in kB)")
 
-# 6) 生成 infile.meta（N, Nt, dt(fs), T(K)）
-printf "%d
-%d
-%.1f
-%.1f
-" "$N" "$Nt" "$DT_FS" "$TEMP_K" &gt; infile.meta
-echo "[OK] infile.meta"
+    sxx_kB, syy_kB, szz_kB, sxy_kB, syz_kB, sxz_kB = last_stress_vals
+    # kB -> GPa: 1 kB = 0.1 GPa
+    sxx = sxx_kB * 0.1
+    syy = syy_kB * 0.1
+    szz = szz_kB * 0.1
+    sxy = sxy_kB * 0.1
+    syz = syz_kB * 0.1
+    sxz = sxz_kB * 0.1
 
-# 7) 生成 infile.stat
-echo "[info] building infile.stat ..."
+    P = -(sxx + syy + szz) / 3.0
 
-for f in infile.positions infile.forces infile.lattice infile.meta infile.ssposcar infile.ucposcar; do
-  [[ -s "$f" ]] || { echo "[ERR] 缺文件: $f"; exit 1; }
-done
+    return forces, Ep, Et, Ek, P, sxx, syy, szz, sxy, syz, sxz
 
-Nt_pos=$(( $(wc -l &lt; infile.positions) / N ))
-echo "[check] Nt(positions) = $Nt_pos"
-if [[ $Nt_pos -ne $Nt ]]; then
-  echo "[warn] 目录帧数($Nt) 与 positions 推断($Nt_pos) 不一致，仍以目录顺序生成 infile.stat"
-fi
 
-: &gt; infile.stat
-i=0
-for d in "${FRAMES[@]}"; do
-  i=$(( i + 1 ))
-  t_fs=$(( (i-1)*DT_FS ))
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate TDEP input files from VASP frames (POSCAR + OUTCAR/OUTCAR.gz)."
+    )
+    parser.add_argument("--temp", type=float, default=600.0,
+                        help="Nominal temperature T(K) for infile.meta/stat (default: 600)")
+    parser.add_argument("--dt-fs", type=float, default=12500.0,
+                        help="Time interval between frames in fs (default: 12500)")
+    args = parser.parse_args()
 
-  if   [[ -s "$d/OUTCAR.gz" ]]; then src=(gzip -cd -- "$d/OUTCAR.gz")
-  elif [[ -s "$d/OUTCAR"    ]]; then src=(cat        -- "$d/OUTCAR")
-  else echo "[ERR] 缺 OUTCAR: $d"; exit 1; fi
+    TEMP_K = args.temp
+    DT_FS = args.dt_fs
 
-  Ep=$("${src[@]}" | awk '
-    /energy  without entropy=/ { e=$4 }
-    /free  energy   TOTEN/     { t=$5 }
-    END { if (e!="") print e; else if (t!="") print t; else print 0 }
-  ')
-  Et="$Ep"
-  Ek="0.0"
-  Tval="$TEMP_K"
+    print(f"[info] T (meta/stat) = {TEMP_K} K")
+    print(f"[info] Δt (meta/stat)= {DT_FS} fs\n")
 
-  stress_vals=$("${src[@]}" | awk '/in kB/ {print $(NF-5),$(NF-4),$(NF-3),$(NF-2),$(NF-1),$NF}' | tail -n 1)
-  if [[ -z "$stress_vals" ]]; then
-    echo "[ERR] [$d] 无法在 OUTCAR 中找到应力 (in kB)"
-    exit 1
-  fi
-  read -r sxx_kB syy_kB szz_kB sxy_kB syz_kB sxz_kB &lt;&lt;&lt; "$stress_vals"
+    # 1) 查找帧目录
+    frame_dirs = find_frame_dirs()
+    if not frame_dirs:
+        print("[ERR] 当前目录下没有找到任何同时包含 POSCAR 和 OUTCAR(或 OUTCAR.gz) 的 VASP 计算目录")
+        sys.exit(1)
 
-  sxx=$(awk -v x="$sxx_kB" 'BEGIN{printf("%.6f", x*0.1)}')
-  syy=$(awk -v x="$syy_kB" 'BEGIN{printf("%.6f", x*0.1)}')
-  szz=$(awk -v x="$szz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
-  sxy=$(awk -v x="$sxy_kB" 'BEGIN{printf("%.6f", x*0.1)}')
-  syz=$(awk -v x="$syz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
-  sxz=$(awk -v x="$sxz_kB" 'BEGIN{printf("%.6f", x*0.1)}')
+    print("[info] 识别到的帧目录：", " ".join(frame_dirs))
+    Nt = len(frame_dirs)
+    print(f"[info] Nt (frames)   = {Nt}\n")
 
-  P=$(awk -v a="$sxx" -v b="$syy" -v c="$szz" 'BEGIN{printf("%.6f", -(a+b+c)/3.0)}')
+    # 2) 读 POSCAR，构造平均结构
+    images = read_poscars(frame_dirs)
+    N = len(images[0])
+    print(f"[info] N (atoms)     = {N}\n")
 
-  printf "%d %.1f %.10f %.10f %.6f %.1f %.6f %.6f %.6f %.6f %.6f %.6f %.6f
-"          "$i" "$t_fs" "$Et" "$Ep" "$Ek" "$Tval" "$P" "$sxx" "$syy" "$szz" "$sxy" "$syz" "$sxz"          &gt;&gt; infile.stat
-done
+    avg_poscar_name = f"POSCAR_avg_{int(TEMP_K)}K"
+    avg_atoms = build_average_structure(images, TEMP_K, avg_poscar_name)
 
-awk '{if (NF!=13){print "infile.stat 第",NR,"行列数=",NF,"≠13"; exit 1}} END{print "infile.stat 列数OK(13)"}' infile.stat
-tail -c1 infile.stat | od -An -t x1 | grep -q '0a' || printf "
-" &gt;&gt; infile.stat
-echo "[OK] infile.stat（共 $(wc -l &lt; infile.stat) 行）"
+    # 3) 写 infile.ssposcar / infile.ucposcar
+    write("infile.ssposcar", avg_atoms, format="vasp", direct=True, vasp5=True)
+    write("infile.ucposcar", avg_atoms, format="vasp", direct=True, vasp5=True)
+    print("[OK] infile.ssposcar / infile.ucposcar\n")
 
-echo
-echo "[check] positions 行数 = $(wc -l &lt; infile.positions) (应为 N*Nt=$((N*Nt)))"
-echo "[check] forces    行数 = $(wc -l &lt; infile.forces)    (应为 N*Nt=$((N*Nt)))"
-echo "[check] lattice   行数 = $(wc -l &lt; infile.lattice)   (应为 3*Nt=$((3*Nt)))"
+    # 4) 生成 infile.positions (ASE 直接拿分数坐标，避免手动解析 Direct/Cartesian)
+    print("[info] building infile.positions ...")
+    with open("infile.positions", "w") as f_pos:
+        for atoms in images:
+            if len(atoms) != N:
+                raise RuntimeError("All frames must have the same number of atoms")
+            frac = atoms.get_scaled_positions()
+            for xyz in frac:
+                f_pos.write(f"{xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
+    print("[OK] infile.positions\n")
 
-awk '{if (NF!=3){print "positions 列数异常: 第",NR,"行"; exit 1}}' infile.positions || exit 1
-awk '{if (NF!=3){print "forces 列数异常: 第",NR,"行"; exit 1}}'    infile.forces    || exit 1
-awk '{if (NF!=3){print "lattice 列数异常: 第",NR,"行"; exit 1}}'   infile.lattice   || exit 1
+    # 5) 生成 infile.lattice (每帧 3 行晶格向量)
+    print("[info] building infile.lattice ...")
+    with open("infile.lattice", "w") as f_lat:
+        for atoms in images:
+            cell = atoms.cell  # 3x3
+            for v in cell:
+                f_lat.write(f"{v[0]:.10f} {v[1]:.10f} {v[2]:.10f}\n")
+    print("[OK] infile.lattice\n")
 
-[[ "$(wc -l &lt; infile.meta)" -eq 4 ]] || { echo "[ERR] infile.meta 不是 4 行"; exit 1; }
+    # 6) 生成 infile.forces & 中途收集 stat 所需信息
+    print("[info] building infile.forces & collecting stat info ...")
+    all_forces = []
+    stat_records = []  # (Ep, Et, Ek, P, sxx, syy, szz, sxy, syz, sxz)
 
-for f in infile.positions infile.forces infile.lattice infile.meta infile.stat; do
-  tail -c1 "$f" | od -An -t x1 | grep -q '0a' || printf "
-" &gt;&gt; "$f"
-done
+    for d in frame_dirs:
+        forces, Ep, Et, Ek, P, sxx, syy, szz, sxy, syz, sxz = parse_outcar_for_forces_energy_stress(d, N)
+        all_forces.append(forces)
+        stat_records.append((Ep, Et, Ek, P, sxx, syy, szz, sxy, syz, sxz))
 
-echo
-echo "[DONE] TDEP 所需 7 个文件已全部生成："
-echo "       infile.ssposcar  infile.ucposcar"
-echo "       infile.positions infile.forces"
-echo "       infile.lattice   infile.meta"
-echo "       infile.stat"</code></pre>
+    with open("infile.forces", "w") as f_for:
+        for forces in all_forces:
+            for fx, fy, fz in forces:
+                f_for.write(f"{fx:.10f} {fy:.10f} {fz:.10f}\n")
+    print("[OK] infile.forces\n")
+
+    # 7) 生成 infile.meta
+    with open("infile.meta", "w") as f_meta:
+        f_meta.write(f"{N:d}\n")
+        f_meta.write(f"{Nt:d}\n")
+        f_meta.write(f"{DT_FS:.1f}\n")
+        f_meta.write(f"{TEMP_K:.1f}\n")
+    print("[OK] infile.meta\n")
+
+    # 8) 生成 infile.stat
+    print("[info] building infile.stat ...")
+    with open("infile.stat", "w") as f_stat:
+        for i, (Ep, Et, Ek, P, sxx, syy, szz, sxy, syz, sxz) in enumerate(stat_records, start=1):
+            t_fs = (i - 1) * DT_FS
+            Tval = TEMP_K
+            # 与原 bash 脚本格式对应: i t_fs Et Ep Ek T P sxx syy szz sxy syz sxz
+            line = (
+                f"{i:d} "
+                f"{t_fs:.1f} "
+                f"{Et:.10f} "
+                f"{Ep:.10f} "
+                f"{Ek:.6f} "
+                f"{Tval:.1f} "
+                f"{P:.6f} "
+                f"{sxx:.6f} "
+                f"{syy:.6f} "
+                f"{szz:.6f} "
+                f"{sxy:.6f} "
+                f"{syz:.6f} "
+                f"{sxz:.6f}\n"
+            )
+            f_stat.write(line)
+
+    # 简单列数检查
+    with open("infile.stat", "r") as f_stat:
+        for lineno, line in enumerate(f_stat, start=1):
+            if not line.strip():
+                continue
+            nf = len(line.split())
+            if nf != 13:
+                raise RuntimeError(f"infile.stat 第 {lineno} 行列数={nf} ≠ 13")
+    print("[OK] infile.stat 列数OK(13)\n")
+
+    # 9) 简单一致性检查
+    def count_lines(fname: str) -> int:
+        with open(fname, "r") as f:
+            return sum(1 for _ in f)
+
+    n_pos = count_lines("infile.positions")
+    n_for = count_lines("infile.forces")
+    n_lat = count_lines("infile.lattice")
+
+    print(f"[check] positions 行数 = {n_pos} (应为 N*Nt={N*Nt})")
+    print(f"[check] forces    行数 = {n_for} (应为 N*Nt={N*Nt})")
+    print(f"[check] lattice   行数 = {n_lat} (应为 3*Nt={3*Nt})")
+
+    if n_pos != N * Nt:
+        raise RuntimeError("infile.positions 行数不等于 N*Nt")
+    if n_for != N * Nt:
+        raise RuntimeError("infile.forces 行数不等于 N*Nt")
+    if n_lat != 3 * Nt:
+        raise RuntimeError("infile.lattice 行数不等于 3*Nt")
+
+    print("\n[DONE] TDEP 所需 7 个文件已全部生成：")
+    print("       infile.ssposcar  infile.ucposcar")
+    print("       infile.positions infile.forces")
+    print("       infile.lattice   infile.meta")
+    print("       infile.stat")
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
       </details>
     </section>
 
