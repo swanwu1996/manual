@@ -204,10 +204,10 @@
 <body>
   <div class="page">
     <header>
-      <h1>TDEP 使用手册（统一脚本版）</h1>
+      <h1>TDEP 使用手册</h1>
       <p>用一个 bash 脚本一次性生成 TDEP 所需 7 个 infile.*，再完成打包和后处理</p>
       <div class="meta">
-        <span>written by<code class="inline"> qhwu </code></span>
+        <span>written by qhwu </code></span>
         <span>环境：VASP + TDEP</span>
         <span>示例温度：600 K</span>
       </div>
@@ -219,18 +219,30 @@
         <span class="step">0</span>
         目录与输入假设
       </h2>
-      <p>默认在 <code class="inline">runs/</code> 目录下，每个子目录是一次 VASP 单点计算，命名不作强制要求（可以是 <code class="inline">frame_0001</code>、<code class="inline">0001</code>、<code class="inline">vasp-0001</code> 等）。</p>
-      <pre><code>runs/
-  0001/       POSCAR  OUTCAR(.gz)
-  0002/       POSCAR  OUTCAR(.gz)
-  vasp-0003/  POSCAR  OUTCAR(.gz)
-  ...
+      <p>本手册支持两种典型输入布局，对应 Step 1 的两种生成方式：</p>
+      <ul>
+        <li><strong>方式 A：多帧静态计算</strong> —— 在 <code class="inline">runs/</code> 目录下有多个子目录，每个子目录是一帧静态 VASP 计算，包含 <code class="inline">POSCAR</code> 和 <code class="inline">OUTCAR/OUTCAR.gz</code>。</li>
+        <li><strong>方式 B：单一 AIMD 轨迹</strong> —— 在同一目录下有一条 VASP MD 轨迹的 <code class="inline">POSCAR</code>、<code class="inline">XDATCAR</code> 和 <code class="inline">OUTCAR/OUTCAR.gz</code>，直接在该目录中运行 AIMD 脚本。</li>
+      </ul>
+      <p>推荐的项目目录示意（仅作参考）：</p>
+      <pre><code>project/
+  T600_static/
+    runs/
+      frame_0001/  POSCAR  OUTCAR(.gz)
+      0002/        POSCAR  OUTCAR(.gz)
+      vasp-0003/   POSCAR  OUTCAR(.gz)
+      ...
+  T600_aimd/
+    POSCAR
+    XDATCAR
+    OUTCAR(.gz)
+    tdep_init_aimd.py
 </code></pre>
       <ul>
-        <li>每个子目录下必须包含：<code class="inline">POSCAR</code> 和 <code class="inline">OUTCAR</code>（或 <code class="inline">OUTCAR.gz</code>）。</li>
-        <li><code class="inline">POSCAR</code> 建议使用 <code class="inline">Direct</code> 分数坐标；若为 <code class="inline">Cartesian</code>，请先转换为 <code class="inline">Direct</code>。</li>
+        <li>方式 A：进入 <code class="inline">runs/</code> 目录，运行 <code class="inline">tdep_init.py</code>；脚本会自动扫描所有含 <code class="inline">POSCAR</code> + <code class="inline">OUTCAR(.gz)</code> 的子目录。</li>
+        <li>方式 B：进入含 <code class="inline">POSCAR</code>、<code class="inline">XDATCAR</code>、<code class="inline">OUTCAR/OUTCAR.gz</code> 的 AIMD 目录，运行 <code class="inline">tdep_init_aimd.py</code>。</li>
+        <li>两种方式下，<code class="inline">POSCAR</code> 建议使用 <code class="inline">Direct</code> 分数坐标；若为 <code class="inline">Cartesian</code>，请先转换为 <code class="inline">Direct</code>。</li>
         <li>物种顺序（如 <code class="inline">Cs I Pb</code>）在所有帧保持一致，原子总数 <code class="inline">N</code> 不变。</li>
-        <li>建议将 <code class="inline">ref0K/</code>、<code class="inline">refVT/</code> 等参考计算放在 <code class="inline">runs/</code> 之外，避免被误识别为帧目录。</li>
       </ul>
     </section>
 
@@ -238,8 +250,15 @@
     <section class="card">
       <h2>
         <span class="step">1</span>
-        一键生成 7 个 infile.* 文件 <small>统一脚本</small>
+        一键生成 7 个 infile.* 文件 <small>统一脚本 + AIMD 版本</small>
       </h2>
+      <p>根据你的计算类型，有两种常用方式生成 TDEP 所需的 7 个 <code class="inline">infile.*</code> 文件：</p>
+      <ul>
+        <li><strong>方式 A：</strong>多个静态 VASP 计算，分散在 <code class="inline">runs/</code> 子目录中（原有脚本 <code class="inline">tdep_init.py</code>）。</li>
+        <li><strong>方式 B：</strong>单一 AIMD 轨迹：同一目录里有 <code class="inline">POSCAR + XDATCAR + OUTCAR/OUTCAR.gz</code>（新增脚本 <code class="inline">tdep_init_aimd.py</code>）。</li>
+      </ul>
+
+      <h3>方式 A：多帧静态计算</h3>
       <p>在 <code class="inline">runs/</code> 目录下保存下面脚本为 <code class="inline">tdep_init.py</code>，并赋予执行权限：</p>
       <pre><code># 默认 T=600 K, dt=12500 fs
 python tdep_init.py
@@ -262,7 +281,7 @@ python tdep_init.py --temp 800 --dt-fs 10000</code></pre>
 TDEP initialization script (Python only, no LAMMPS dump).
 
 - 自动扫描当前目录下子目录，只要含 POSCAR + OUTCAR/OUTCAR.gz 就认为是一帧
-- 用所有帧的 POSCAR 做时间平均，生成 POSCAR_avg_<TEMP>K
+- 用所有帧的 POSCAR 做时间平均，生成 POSCAR_avg_&lt;TEMP&gt;K
 - 生成:
     infile.ssposcar  infile.ucposcar
     infile.positions infile.forces
@@ -342,7 +361,7 @@ def build_average_structure(images: List[Atoms], temp_k: float, filename: str) -
             x = frac_unwrapped[:, ia, ic]
             dx = np.diff(x)
             dx[dx > 0.5] -= 1.0
-            dx[dx < -0.5] += 1.0
+            dx[dx &lt; -0.5] += 1.0
             x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
             frac_unwrapped[:, ia, ic] = x_unwrap
 
@@ -392,7 +411,7 @@ def parse_outcar_for_forces_energy_stress(path_dir: str, natoms: int
             cols = lines[j].split()
         except IndexError:
             raise RuntimeError(f"[{path_dir}] TOTAL-FORCE 块长度不足 N={natoms} 行")
-        if len(cols) < 3:
+        if len(cols) &lt; 3:
             raise RuntimeError(f"[{path_dir}] TOTAL-FORCE 行列数太少: {lines[j].rstrip()}")
         fx, fy, fz = map(float, cols[-3:])
         forces.append([fx, fy, fz])
@@ -407,16 +426,16 @@ def parse_outcar_for_forces_energy_stress(path_dir: str, natoms: int
     for line in lines:
         if "energy  without entropy=" in line:
             parts = line.split()
-            # "... energy  without entropy=   <val>  energy(sigma->0)..."
-            if len(parts) >= 4:
+            # "... energy  without entropy=   &lt;val&gt;  energy(sigma-&gt;0)..."
+            if len(parts) &gt;= 4:
                 try:
                     e_val = float(parts[3])
                 except ValueError:
                     pass
         elif "free  energy   TOTEN" in line:
             parts = line.split()
-            # "free  energy   TOTEN  =  <val> eV"
-            if len(parts) >= 5:
+            # "free  energy   TOTEN  =  &lt;val&gt; eV"
+            if len(parts) &gt;= 5:
                 try:
                     t_val = float(parts[4])
                 except ValueError:
@@ -438,7 +457,7 @@ def parse_outcar_for_forces_energy_stress(path_dir: str, natoms: int
         if "in kB" in line:
             parts = line.split()
             # 最后 6 项为 xx yy zz xy yz zx (单位 kB)
-            if len(parts) >= 6:
+            if len(parts) &gt;= 6:
                 try:
                     vals = list(map(float, parts[-6:]))
                     last_stress_vals = vals
@@ -449,7 +468,7 @@ def parse_outcar_for_forces_energy_stress(path_dir: str, natoms: int
         raise RuntimeError(f"[{path_dir}] 无法在 OUTCAR 中找到应力 (in kB)")
 
     sxx_kB, syy_kB, szz_kB, sxy_kB, syz_kB, sxz_kB = last_stress_vals
-    # kB -> GPa: 1 kB = 0.1 GPa
+    # kB -&gt; GPa: 1 kB = 0.1 GPa
     sxx = sxx_kB * 0.1
     syy = syy_kB * 0.1
     szz = szz_kB * 0.1
@@ -610,6 +629,436 @@ if __name__ == "__main__":
     main()
 </code></pre>
       </details>
+
+      <h3 style="margin-top:1rem;">方式 B：单一 AIMD 轨迹（POSCAR + XDATCAR + OUTCAR）</h3>
+      <p>
+        若你已经做了一条 VASP AIMD 轨迹（NVT / NVE / NPT 等），并在同一目录下得到
+        <code class="inline">POSCAR</code>、<code class="inline">XDATCAR</code> 和 <code class="inline">OUTCAR</code>（或 <code class="inline">OUTCAR.gz</code>），可以直接在该目录中使用下面的脚本
+        <code class="inline">tdep_init_aimd.py</code>：
+      </p>
+      <pre><code># 默认 T=600 K, POTIM = 2.0 fs, n=1
+python tdep_init_aimd.py
+
+# 指定温度和 AIMD 时间步长 (fs)，每隔 n 帧取样一次
+python tdep_init_aimd.py --temp 800 --dt-fs 1.0 -n 50
+</code></pre>
+      <p>脚本功能：</p>
+      <ul>
+        <li>从 <code class="inline">XDATCAR</code> 读取所有 MD 帧的分数坐标，从 <code class="inline">OUTCAR</code> 读取每步的力、能量和应力。</li>
+        <li>支持 <code class="inline">--stride</code> 对轨迹下采样，缓解时间相关性。</li>
+        <li>用抽样后的帧在分数坐标下做周期展开 + 时间平均，生成 <code class="inline">POSCAR_avg_TK</code>，并写为 <code class="inline">infile.ssposcar</code>/<code class="inline">infile.ucposcar</code>。</li>
+        <li>同步生成 <code class="inline">infile.positions</code>、<code class="inline">infile.forces</code>、<code class="inline">infile.lattice</code>、<code class="inline">infile.meta</code> 与 <code class="inline">infile.stat</code>。</li>
+      </ul>
+      <details>
+        <summary>展开 / 折叠：tdep_init_aimd.py 完整脚本</summary>
+        <pre><code>#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+从 VASP AIMD (POSCAR + XDATCAR + OUTCAR) 生成 TDEP 所需 7 个 infile* 文件。
+
+- 支持 stride，下采样 AIMD：只用每 n-th 帧，缓解时间相关性问题
+- 自动从 XDATCAR 读原子坐标，从 OUTCAR 读力、能量、应力
+- 用抽样后的帧做时间平均，生成平均结构 POSCAR_avg_TK，并写成 infile.ssposcar / infile.ucposcar
+
+生成文件：
+    infile.ssposcar  infile.ucposcar
+    infile.positions infile.forces
+    infile.lattice   infile.meta
+    infile.stat
+"""
+
+import argparse
+import gzip
+import os
+import sys
+from typing import List, Tuple
+
+import numpy as np
+from ase.io import read, write
+from ase import Atoms
+
+
+def open_outcar(path: str):
+    """打开 OUTCAR 或 OUTCAR.gz"""
+    outgz = os.path.join(path, "OUTCAR.gz")
+    out = os.path.join(path, "OUTCAR")
+    if os.path.isfile(outgz):
+        return gzip.open(outgz, "rt", errors="ignore")
+    elif os.path.isfile(out):
+        return open(out, "rt", errors="ignore")
+    else:
+        raise FileNotFoundError("当前目录缺少 OUTCAR/OUTCAR.gz")
+
+
+def read_xdatcar_structures(xdatcar: str, symbols_ref: List[str], cell_ref) -> List[Atoms]:
+    """
+    用 ASE 从 XDATCAR 读取所有帧，返回 Atoms 列表。
+    """
+    try:
+        images = read(xdatcar, format="vasp-xdatcar", index=":")
+    except Exception as e:
+        raise RuntimeError(f"读取 XDATCAR 失败: {e}")
+
+    if not images:
+        raise RuntimeError("XDATCAR 中没有读到任何结构")
+
+    # 确保符号顺序一致
+    for i, img in enumerate(images):
+        if img.get_chemical_symbols() != symbols_ref:
+            raise RuntimeError(f"XDATCAR 第 {i} 帧的元素序列与 POSCAR 不一致")
+
+        # 把晶格设为 POSCAR 的晶格（多数 NVT/NVE 情况是恒定的）
+        img.set_cell(cell_ref, scale_atoms=False)
+        img.set_pbc(True)
+
+    return images
+
+
+def parse_outcar_all(natoms: int):
+    """
+    一次性解析 OUTCAR 中所有 MD 步的：
+      forces_t: (Nt, N, 3) in eV/Å
+      Ep_t: (Nt,) potential energy (energy without entropy 或 TOTEN)
+      Et_t: (Nt,) total energy (这里简单等于 Ep_t)
+      Ek_t: (Nt,) kinetic energy (这里设为 0，占位)
+      P_t : (Nt,) pressure (GPa)
+      stress_t: (Nt, 6) -&gt; [sxx, syy, szz, sxy, syz, sxz] in GPa
+    """
+    with open_outcar(".") as f:
+        lines = f.readlines()
+
+    # -------- forces: 所有 POSITION ... TOTAL-FORCE 块 ----------
+    header_indices = [
+        i for i, line in enumerate(lines)
+        if "POSITION" in line and "TOTAL-FORCE" in line
+    ]
+    if not header_indices:
+        raise RuntimeError("OUTCAR 中找不到任何 TOTAL-FORCE 块")
+
+    forces_list = []
+    for start in header_indices:
+        block_forces = []
+        for j in range(start + 2, start + 2 + natoms):
+            try:
+                cols = lines[j].split()
+            except IndexError:
+                raise RuntimeError(f"OUTCAR TOTAL-FORCE 块长度不足 N={natoms} 行 (起始行 {start})")
+            if len(cols) &lt; 3:
+                raise RuntimeError(f"TOTAL-FORCE 行列数太少: {lines[j].rstrip()}")
+            fx, fy, fz = map(float, cols[-3:])
+            block_forces.append([fx, fy, fz])
+        block_forces = np.array(block_forces)
+        if block_forces.shape != (natoms, 3):
+            raise RuntimeError(f"某个 forces 块形状异常: {block_forces.shape}, 期望 ({natoms},3)")
+        forces_list.append(block_forces)
+
+    forces_t = np.stack(forces_list, axis=0)  # (Nt_force, N, 3)
+    Nt_force = forces_t.shape[0]
+
+    # -------- energies ----------
+    Ep_list = []
+    Et_list = []
+    Ek_list = []  # 这里全设为 0
+
+    # 简单策略：顺序扫描，遇到 "energy  without entropy=" 就记一条
+    for line in lines:
+        if "energy  without entropy=" in line:
+            parts = line.split()
+            if len(parts) &gt;= 4:
+                try:
+                    Ep_val = float(parts[3])
+                    Ep_list.append(Ep_val)
+                    Et_list.append(Ep_val)
+                    Ek_list.append(0.0)
+                except ValueError:
+                    pass
+
+    Ep_t = np.array(Ep_list, dtype=float)
+    Et_t = np.array(Et_list, dtype=float)
+    Ek_t = np.array(Ek_list, dtype=float)
+    Nt_E = len(Ep_t)
+
+    # -------- stresses ----------
+    stress_vals = []
+    for line in lines:
+        if "in kB" in line:
+            parts = line.split()
+            # 最后 6 项为 xx yy zz xy yz zx (kB)
+            if len(parts) &gt;= 6:
+                try:
+                    vals = list(map(float, parts[-6:]))
+                    stress_vals.append(vals)
+                except ValueError:
+                    continue
+
+    if not stress_vals:
+        raise RuntimeError("OUTCAR 中找不到任何应力 (in kB) 行")
+
+    stress_vals = np.array(stress_vals, dtype=float)  # (Nt_stress, 6)
+    Nt_stress = stress_vals.shape[0]
+
+    # 单位转换 kB -&gt; GPa (1 kB = 0.1 GPa)
+    stress_GPa = stress_vals * 0.1
+    sxx = stress_GPa[:, 0]
+    syy = stress_GPa[:, 1]
+    szz = stress_GPa[:, 2]
+    sxy = stress_GPa[:, 3]
+    syz = stress_GPa[:, 4]
+    sxz = stress_GPa[:, 5]
+    P_t = -(sxx + syy + szz) / 3.0
+
+    stress_t = np.stack([sxx, syy, szz, sxy, syz, sxz], axis=1)  # (Nt_stress, 6)
+
+    # -------- 对齐步数 ----------
+    Nt_common = min(Nt_force, Nt_E, Nt_stress)
+    forces_t = forces_t[:Nt_common]
+    Ep_t = Ep_t[:Nt_common]
+    Et_t = Et_t[:Nt_common]
+    Ek_t = Ek_t[:Nt_common]
+    P_t = P_t[:Nt_common]
+    stress_t = stress_t[:Nt_common]
+
+    print(f"[PY] OUTCAR: n_force_blocks={Nt_force}, n_energies={Nt_E}, n_stresses={Nt_stress}")
+    return forces_t, Ep_t, Et_t, Ek_t, P_t, stress_t
+
+
+def build_average_structure(images: List[Atoms], temp_k: float, filename: str) -> Atoms:
+    """
+    对选中的 AIMD 帧做时间平均（用分数坐标 + 周期展开），写出 VASP POSCAR。
+    """
+    if not images:
+        raise RuntimeError("没有可用于平均的帧")
+
+    ref = images[0]
+    cell = ref.cell.copy()
+    symbols = ref.get_chemical_symbols()
+
+    # 检查每一帧的元素序列是否一致
+    for i, img in enumerate(images):
+        if img.get_chemical_symbols() != symbols:
+            raise RuntimeError(f"Frame {i} symbols mismatch with reference")
+
+    frac_all = np.array([img.get_scaled_positions() for img in images])  # (Nt, N, 3)
+    n_frames, n_atoms, _ = frac_all.shape
+    print(f"[PY] n_frames = {n_frames}, n_atoms = {n_atoms}")
+
+    # 周期展开（unwrapping）
+    frac_unwrapped = frac_all.copy()
+    for ia in range(n_atoms):
+        for ic in range(3):
+            x = frac_unwrapped[:, ia, ic]
+            dx = np.diff(x)
+            dx[dx &gt; 0.5] -= 1.0
+            dx[dx &lt; -0.5] += 1.0
+            x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
+            frac_unwrapped[:, ia, ic] = x_unwrap
+
+    # 时间平均 + 折回 [0,1)
+    frac_mean = frac_unwrapped.mean(axis=0) % 1.0
+
+    avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
+    avg_atoms.set_scaled_positions(frac_mean)
+
+    write(filename, avg_atoms, format="vasp", direct=True, vasp5=True)
+    print(f"[PY] Average structure written to {filename}")
+    return avg_atoms
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate TDEP input files from VASP AIMD (POSCAR + XDATCAR + OUTCAR)."
+    )
+    parser.add_argument(
+        "--temp", type=float, default=600.0,
+        help="Nominal temperature T(K) for infile.meta/stat (default: 600)"
+    )
+    parser.add_argument(
+        "--dt-fs", type=float, default=2.0,
+        help="MD time step in fs (VASP POTIM, default: 2.0)"
+    )
+    parser.add_argument(
+        "-n", "--stride", type=int, default=1,
+        help="Use every n-th MD frame (default: 1 = use all frames)"
+    )
+
+    args = parser.parse_args()
+
+    TEMP_K = args.temp
+    DT_FS_MD = args.dt_fs
+    stride = max(1, int(args.stride))
+
+    print(f"[info] T (meta/stat)       = {TEMP_K} K")
+    print(f"[info] MD Δt (input)       = {DT_FS_MD} fs")
+    print(f"[info] stride (frame step) = {stride}\n")
+
+    # 0) 读 POSCAR 作为参考结构
+    if not os.path.isfile("POSCAR"):
+        print("[ERR] 当前目录下找不到 POSCAR")
+        sys.exit(1)
+
+    try:
+        atoms_ref = read("POSCAR", format="vasp")
+    except Exception as e:
+        print(f"[ERR] 读取 POSCAR 失败: {e}")
+        sys.exit(1)
+
+    N = len(atoms_ref)
+    symbols_ref = atoms_ref.get_chemical_symbols()
+    cell_ref = atoms_ref.cell.copy()
+    print(f"[info] N (atoms)     = {N}")
+
+    # 1) 从 XDATCAR 读所有结构
+    if not os.path.isfile("XDATCAR"):
+        print("[ERR] 当前目录下找不到 XDATCAR")
+        sys.exit(1)
+
+    images = read_xdatcar_structures("XDATCAR", symbols_ref, cell_ref)
+    Nt_pos = len(images)
+    print(f"[info] Nt_pos (from XDATCAR) = {Nt_pos}")
+
+    # 2) 从 OUTCAR 解析所有 forces / energies / stresses
+    forces_t, Ep_t, Et_t, Ek_t, P_t, stress_t = parse_outcar_all(N)
+    Nt_force = forces_t.shape[0]
+    print(f"[info] Nt_force (from OUTCAR) = {Nt_force}")
+
+    # 3) 取公共最小步数，再做 stride 抽样
+    Nt_raw = min(Nt_pos, Nt_force)
+    if Nt_raw &lt;= 0:
+        print("[ERR] 没有共同的 MD 步可用")
+        sys.exit(1)
+
+    if stride &lt; 1:
+        stride = 1
+
+    indices = np.arange(0, Nt_raw, stride, dtype=int)
+    if len(indices) == 0:
+        indices = np.array([0], dtype=int)
+
+    Nt = len(indices)
+    print(f"[info] Nt (used steps)       = {Nt}  (raw Nt = {Nt_raw}, first={indices[0]}, last={indices[-1]})\n")
+
+    # 4) 用抽样后的帧做时间平均结构
+    images_sel = [images[i] for i in indices]
+    avg_poscar_name = f"POSCAR_avg_{int(TEMP_K)}K"
+    avg_atoms = build_average_structure(images_sel, TEMP_K, avg_poscar_name)
+
+    # 写 infile.ssposcar / infile.ucposcar
+    write("infile.ssposcar", avg_atoms, format="vasp", direct=True, vasp5=True)
+    write("infile.ucposcar", avg_atoms, format="vasp", direct=True, vasp5=True)
+    print("[OK] infile.ssposcar / infile.ucposcar\n")
+
+    # 5) 生成 infile.positions
+    print("[info] building infile.positions ...")
+    with open("infile.positions", "w") as f_pos:
+        for it in indices:
+            atoms = images[it]
+            if len(atoms) != N:
+                raise RuntimeError(f"XDATCAR 第 {it} 帧原子数 {len(atoms)} ≠ N={N}")
+            frac = atoms.get_scaled_positions()
+            for xyz in frac:
+                f_pos.write(f"{xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
+    print("[OK] infile.positions\n")
+
+    # 6) 生成 infile.lattice
+    print("[info] building infile.lattice ...")
+    with open("infile.lattice", "w") as f_lat:
+        for it in indices:
+            cell = images[it].cell  # 3x3
+            for v in cell:
+                f_lat.write(f"{v[0]:.10f} {v[1]:.10f} {v[2]:.10f}\n")
+    print("[OK] infile.lattice\n")
+
+    # 7) 生成 infile.forces & 收集 stat 所需信息
+    print("[info] building infile.forces & collecting stat info ...")
+    with open("infile.forces", "w") as f_for:
+        for it in indices:
+            forces = forces_t[it]  # (N,3)
+            if forces.shape != (N, 3):
+                raise RuntimeError(f"forces_t[{it}] 形状异常: {forces.shape}, 期望 ({N},3)")
+            for fx, fy, fz in forces:
+                f_for.write(f"{fx:.10f} {fy:.10f} {fz:.10f}\n")
+    print("[OK] infile.forces\n")
+
+    # 8) 生成 infile.meta
+    dt_eff = DT_FS_MD * stride
+    with open("infile.meta", "w") as f_meta:
+        f_meta.write(f"{N:d}\n")
+        f_meta.write(f"{Nt:d}\n")
+        f_meta.write(f"{dt_eff:.1f}\n")
+        f_meta.write(f"{TEMP_K:.1f}\n")
+    print("[OK] infile.meta\n")
+
+    # 9) 生成 infile.stat
+    print("[info] building infile.stat ...")
+    with open("infile.stat", "w") as f_stat:
+        for j, it in enumerate(indices, start=1):
+            Ep = float(Ep_t[it])
+            Et = float(Et_t[it])
+            Ek = float(Ek_t[it])
+            P = float(P_t[it])
+            sxx, syy, szz, sxy, syz, sxz = map(float, stress_t[it])
+
+            t_fs = (j - 1) * dt_eff
+            Tval = TEMP_K
+
+            line = (
+                f"{j:d} "
+                f"{t_fs:.1f} "
+                f"{Et:.10f} "
+                f"{Ep:.10f} "
+                f"{Ek:.6f} "
+                f"{Tval:.1f} "
+                f"{P:.6f} "
+                f"{sxx:.6f} "
+                f"{syy:.6f} "
+                f"{szz:.6f} "
+                f"{sxy:.6f} "
+                f"{syz:.6f} "
+                f"{sxz:.6f}\n"
+            )
+            f_stat.write(line)
+
+    # 简单列数检查
+    with open("infile.stat", "r") as f_stat:
+        for lineno, line in enumerate(f_stat, start=1):
+            if not line.strip():
+                continue
+            nf = len(line.split())
+            if nf != 13:
+                raise RuntimeError(f"infile.stat 第 {lineno} 行列数={nf} ≠ 13")
+    print("[OK] infile.stat 列数 OK (13)\n")
+
+    # 10) 一致性检查：行数
+    def count_lines(fname: str) -> int:
+        with open(fname, "r") as f:
+            return sum(1 for _ in f)
+
+    n_pos = count_lines("infile.positions")
+    n_for = count_lines("infile.forces")
+    n_lat = count_lines("infile.lattice")
+
+    print(f"[check] positions 行数 = {n_pos} (应为 N*Nt={N*Nt})")
+    print(f"[check] forces    行数 = {n_for} (应为 N*Nt={N*Nt})")
+    print(f"[check] lattice   行数 = {n_lat} (应为 3*Nt={3*Nt})")
+
+    if n_pos != N * Nt:
+        raise RuntimeError("infile.positions 行数不等于 N*Nt")
+    if n_for != N * Nt:
+        raise RuntimeError("infile.forces 行数不等于 N*Nt")
+    if n_lat != 3 * Nt:
+        raise RuntimeError("infile.lattice 行数不等于 3*Nt")
+
+    print("\n[DONE] TDEP 所需 7 个文件已全部生成：")
+    print("       infile.ssposcar  infile.ucposcar")
+    print("       infile.positions infile.forces")
+    print("       infile.lattice   infile.meta")
+    print("       infile.stat")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+      </details>
     </section>
 
     <!-- Step 2: 打包为 outfile.sim.hdf5 -->
@@ -760,7 +1209,7 @@ END{
     </section>
 
     <div class="footer">
-      TDEP 打包与后处理手册（统一脚本版） · 可直接放入工程项目中复用
+      TDEP 打包与后处理手册 · 可直接放入项目中复用
     </div>
   </div>
 </body>
