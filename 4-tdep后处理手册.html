@@ -240,7 +240,7 @@
         <span class="step">1</span>
         一键生成 7 个 infile.* 文件 <small>统一脚本</small>
       </h2>
-      <p>在 <code class="inline">runs/</code> 目录下保存下面脚本为 <code class="inline">make_tdep_inputs.sh</code>，并赋予执行权限：</p>
+      <p>在 <code class="inline">runs/</code> 目录下保存下面脚本为 <code class="inline">tdep_init.py</code>，并赋予执行权限：</p>
       <pre><code># 默认 T=600 K, dt=12500 fs
 python tdep_init.py
 
@@ -254,7 +254,7 @@ python tdep_init.py --temp 800 --dt-fs 10000</code></pre>
         <li><code class="inline">infile.stat</code></li>
       </ul>
       <details>
-        <summary>展开 / 折叠：make_tdep_inputs.py 完整脚本</summary>
+        <summary>展开 / 折叠：tdep_init.py 完整脚本</summary>
         <pre><code>#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
