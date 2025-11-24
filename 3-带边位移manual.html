@@ -187,22 +187,30 @@
       <p>在包含 <code class="inline">runs/frame*/POSCAR</code> 的目录中新建脚本，生成 <code class="inline">POSCAR_avg</code>：</p>
       <details>
         <summary>展开 / 折叠：生成 POSCAR_avg 的 Python 脚本</summary>
-        <pre><code>from ase.io import read, write
-from ase import Atoms
-import numpy as np
-import glob
+        <pre><code>#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
+import glob
+from typing import List
+
+import numpy as np
+from ase import Atoms
+from ase.io import read, write
 
 
-def read_poscars(frame_dirs):
-    """从 runs/frame_????/POSCAR 收集所有帧\"""
+def read_poscars(frame_dirs: List[str]) -> List[Atoms]:
+    """从 runs/frame_????/POSCAR 收集所有帧"""
     images = []
     for d in frame_dirs:
         pos_path = os.path.join(d, "POSCAR")
         if not os.path.isfile(pos_path):
             raise RuntimeError(f"Frame dir {d} 中缺少 POSCAR")
 
-        atoms = read(pos_path, format="vasp")
+        try:
+            atoms = read(pos_path, format="vasp")
+        except Exception as e:
+            raise RuntimeError(f"Failed to read {pos_path}: {e}")
         images.append(atoms)
 
     if not images:
@@ -211,8 +219,8 @@ def read_poscars(frame_dirs):
     return images
 
 
-def build_average_structure(images, filename="POSCAR_avg"):
-    """用分数坐标 + 周期展开，对所有帧做时间平均，并写出 VASP POSCAR\"""
+def build_average_structure(images: List[Atoms], filename: str = "POSCAR_avg") -> Atoms:
+    """用分数坐标 + 周期展开，对所有帧做时间平均，并写出 VASP POSCAR"""
     if not images:
         raise RuntimeError("No images to average")
 
@@ -238,8 +246,8 @@ def build_average_structure(images, filename="POSCAR_avg"):
         for ic in range(3):
             x = frac_unwrapped[:, ia, ic]
             dx = np.diff(x)
-            dx[dx &gt; 0.5] -= 1.0
-            dx[dx &lt; -0.5] += 1.0
+            dx[dx > 0.5] -= 1.0
+            dx[dx < -0.5] += 1.0
             x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
             frac_unwrapped[:, ia, ic] = x_unwrap
 
@@ -251,17 +259,29 @@ def build_average_structure(images, filename="POSCAR_avg"):
 
     write(filename, avg_atoms, format="vasp", direct=True, vasp5=True)
     print(f"[PY] Average structure written to {filename}")
+    return avg_atoms
 
 
-if __name__ == "__main__":
+def main():
     # 从 ./runs/frame_*/POSCAR 收集所有帧
-    frame_dirs = sorted(
-        d for d in glob.glob("runs/frame_*") if os.path.isdir(d)
-    )
+    pattern = os.path.join("runs", "frame_*")
+    frame_dirs = sorted(d for d in glob.glob(pattern) if os.path.isdir(d))
+    if not frame_dirs:
+        raise RuntimeError(f"No frame dirs match pattern: {pattern}")
+
     print(f"[PY] Found {len(frame_dirs)} frame dirs")
 
     images = read_poscars(frame_dirs)
-    build_average_structure(images, filename="POSCAR_avg")</code></pre>
+
+    # 输出文件名固定为 POSCAR_avg（完全无温度信息）
+    out_name = "POSCAR_avg"
+    build_average_structure(images, out_name)
+
+
+if __name__ == "__main__":
+    main()
+
+</code></pre>
       </details>
       <p>得到的 <code class="inline">POSCAR_avg</code> 将作为 V(T) 参考结构。</p>
     </section>
