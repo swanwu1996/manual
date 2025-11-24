@@ -166,74 +166,104 @@
   <div class="page">
     <header>
       <h1>带边位移计算手册（EPC）</h1>
-      <p>从 NVT 轨迹到带边位移 ΔEv / ΔEc / ΔEg 的后处理流程</p>
+      <p>从 VASP 帧到带边位移 ΔEv / ΔEc / ΔEg 的后处理流程</p>
       <div class="meta">
         <span>Written by<code class="inline">qhwu </code></span>
-        <span>Input: <code class="inline">POSCAR_0K</code> + <code class="inline">trajectory_nvt_bulk.lammpstrj</code></span>
+        <span>Input: <code class="inline">POSCAR_0K</code> + <code class="inline">runs/frame*/POSCAR</code></span>
       </div>
     </header>
 
     <section class="card">
-      <h2><span class="step">1</span>准备 0 K 结构与 NVT 轨迹</h2>
+      <h2><span class="step">1</span>准备 0 K 结构与 VASP 帧（runs/frame*/POSCAR）</h2>
       <ul>
         <li><code class="inline">POSCAR_0K</code>：0 K 参考结构（VASP relaxed 结果）。</li>
-        <li><code class="inline">trajectory_nvt_bulk.lammpstrj</code>：固定盒长 NVT 轨迹（来自 LAMMPS 算例）。</li>
+        <li><code class="inline">runs/frame*/POSCAR</code>：由 NVT 模拟导出的 VASP 帧目录（每个 frame_xxxx 对应一个 POSCAR）。</li>
       </ul>
       <p>后续所有 VASP 帧计算都建议使用统一的 <code class="inline">INCAR</code> / <code class="inline">KPOINTS</code> / <code class="inline">POTCAR</code> 设置。</p>
     </section>
 
     <section class="card">
-      <h2><span class="step">2</span>从轨迹生成 600 K 时间平均参考超胞</h2>
-      <p>在包含 NVT 轨迹的目录中新建脚本，生成 <code class="inline">POSCAR_avg_600K</code>：</p>
+      <h2><span class="step">2</span>从 VASP 帧生成时间平均参考超胞</h2>
+      <p>在包含 <code class="inline">runs/frame*/POSCAR</code> 的目录中新建脚本，生成 <code class="inline">POSCAR_avg</code>：</p>
       <details>
-        <summary>展开 / 折叠：生成 POSCAR_avg_600K 的 Python 脚本</summary>
-        <pre><code>from ase.io import read, write
+        <summary>展开 / 折叠：生成 POSCAR_avg 的 Python 脚本</summary>
+        <pre><codefrom ase.io import read, write
 from ase import Atoms
 import numpy as np
+import glob
+import os
 
-traj_file = 'trajectory_nvt_bulk.lammpstrj'
 
-images = read(traj_file, index=':', format='lammps-dump-text')
-print(f"Read {len(images)} frames from {traj_file}")
+def read_poscars(frame_dirs):
+    """从 runs/frame_????/POSCAR 收集所有帧\"""
+    images = []
+    for d in frame_dirs:
+        pos_path = os.path.join(d, "POSCAR")
+        if not os.path.isfile(pos_path):
+            raise RuntimeError(f"Frame dir {d} 中缺少 POSCAR")
 
-n_frames = len(images)
-ref = images[0]
-cell = ref.cell.copy()
+        atoms = read(pos_path, format="vasp")
+        images.append(atoms)
 
-# 把 LAMMPS 类型映射成真实元素
-orig_symbols = ref.get_chemical_symbols()
-mapping = {'H': 'Cs', 'He': 'I', 'Li': 'Pb'}   # 示例，可根据实际训练模型修改
-symbols = [mapping[s] for s in orig_symbols]
+    if not images:
+        raise RuntimeError("No POSCAR found in given frame directories")
 
-# 收集分数坐标
-frac_all = []
-for img in images:
-    frac_all.append(img.get_scaled_positions())
-frac_all = np.array(frac_all)
+    return images
 
-frac_unwrapped = frac_all.copy()
-n_atoms = frac_unwrapped.shape[1]
 
-for ia in range(n_atoms):
-    for ic in range(3):
-        x = frac_unwrapped[:, ia, ic]
-        dx = np.diff(x)
-        dx[dx &gt;  0.5] -= 1.0
-        dx[dx &lt; -0.5] += 1.0
-        x_unwrap = np.concatenate([[x[0]], x[0] + np.cumsum(dx)])
-        frac_unwrapped[:, ia, ic] = x_unwrap
+def build_average_structure(images, filename="POSCAR_avg"):
+    """用分数坐标 + 周期展开，对所有帧做时间平均，并写出 VASP POSCAR\"""
+    if not images:
+        raise RuntimeError("No images to average")
 
-# 时间平均 + 折回 [0,1)
-frac_mean = frac_unwrapped.mean(axis=0) % 1.0
+    ref = images[0]
+    cell = ref.cell.copy()
+    symbols = ref.get_chemical_symbols()
 
-avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
-avg_atoms.set_scaled_positions(frac_mean)
+    # 检查每一帧的元素序列 / 晶胞是否一致
+    for i, img in enumerate(images):
+        if img.get_chemical_symbols() != symbols:
+            raise RuntimeError(f"Frame {i} symbols mismatch with reference")
+        if not np.allclose(img.cell.array, cell.array, atol=1e-6):
+            raise RuntimeError(f"Frame {i} cell mismatch with reference")
 
-out_file = 'POSCAR_avg_600K'
-write(out_file, avg_atoms, format='vasp', direct=True, vasp5=True)
-print(f"Average structure written to {out_file}")</code></pre>
+    # (Nt, N, 3)
+    frac_all = np.array([img.get_scaled_positions() for img in images])
+    n_frames, n_atoms, _ = frac_all.shape
+    print(f"[PY] n_frames = {n_frames}, n_atoms = {n_atoms}")
+
+    # 周期展开
+    frac_unwrapped = frac_all.copy()
+    for ia in range(n_atoms):
+        for ic in range(3):
+            x = frac_unwrapped[:, ia, ic]
+            dx = np.diff(x)
+            dx[dx &gt; 0.5] -= 1.0
+            dx[dx &lt; -0.5] += 1.0
+            x_unwrap = np.concatenate(([x[0]], x[0] + np.cumsum(dx)))
+            frac_unwrapped[:, ia, ic] = x_unwrap
+
+    # 时间平均 + 折回 [0,1)
+    frac_mean = frac_unwrapped.mean(axis=0) % 1.0
+
+    avg_atoms = Atoms(symbols=symbols, cell=cell, pbc=True)
+    avg_atoms.set_scaled_positions(frac_mean)
+
+    write(filename, avg_atoms, format="vasp", direct=True, vasp5=True)
+    print(f"[PY] Average structure written to {filename}")
+
+
+if __name__ == "__main__":
+    # 从 ./runs/frame_*/POSCAR 收集所有帧
+    frame_dirs = sorted(
+        d for d in glob.glob("runs/frame_*") if os.path.isdir(d)
+    )
+    print(f"[PY] Found {len(frame_dirs)} frame dirs")
+
+    images = read_poscars(frame_dirs)
+    build_average_structure(images, filename="POSCAR_avg")</code></pre>
       </details>
-      <p>得到的 <code class="inline">POSCAR_avg_600K</code> 将作为 V(T) 参考结构。</p>
+      <p>得到的 <code class="inline">POSCAR_avg</code> 将作为 V(T) 参考结构。</p>
     </section>
 
     <section class="card">
@@ -248,7 +278,7 @@ print(f"Average structure written to {out_file}")</code></pre>
 ./refVT
 ├── INCAR
 ├── KPOINTS
-├── POSCAR_avg_600K
+├── POSCAR_avg
 ├── POTCAR</code></pre>
       <p>在 <code class="inline">ref0K</code> 与 <code class="inline">refVT</code> 目录中分别单独跑一次 VASP，确保生成完整的 <code class="inline">vasprun.xml</code>，后面统计会用到。</p>
     </section>
